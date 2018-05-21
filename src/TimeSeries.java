@@ -2,12 +2,14 @@ import java.util.ArrayList;
 
 public class TimeSeries {
     public double data[];
+    public int bandWidth;
     public TimeSeriesEnvelop envelop = null;
+    // following variable only valid when this series is query
     public double orderedData[] = null;
     public double orderedLowerEnvelop[] = null;
     public double orderedUpperEnvelop[] = null;
     public int order[] = null;
-    public int bandWidth;
+
 
     public TimeSeries(double timeSeries[], float bandRate) {
         this.data = timeSeries;
@@ -20,7 +22,7 @@ public class TimeSeries {
         }
     }
 
-    public void initQuery() {
+    public void initAsQuery() {
         ArrayList<DataIndex> indexes = new ArrayList<>(data.length);
         for (int i = 0; i < data.length; i++) {
             indexes.add(new DataIndex(data[i], i));

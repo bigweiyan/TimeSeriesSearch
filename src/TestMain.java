@@ -19,7 +19,7 @@ public class TestMain {
 
     public static void testEnvelop() {
         TimeSeries timeSeries = new TimeSeries(new double[]{6,7,8,9,10,11,10,9,8,7,6,5,4,3,2,1,2,3,4,5,6}, 0.1f);
-        timeSeries.initQuery();
+        timeSeries.initAsQuery();
     }
 
     public static void testQuery(){
@@ -44,9 +44,9 @@ public class TestMain {
         if (query == null || cand == null){
             return;
         }
-        query.initQuery();
+        query.initAsQuery();
         DTWCaculator caculator = new DTWCaculator(query.getLength(), query.bandWidth);
-        int result = caculator.matchQueryWithLongRawSeries(query, cand);
-        System.out.println(result);
+        boolean result = caculator.matchQueryWithNormedSeries(query,query);
+        System.out.println(caculator.getBestSoFar());
     }
 }

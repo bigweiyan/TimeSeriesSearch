@@ -24,6 +24,10 @@ public class DTWCaculator {
      */
     public void reset() {
         bestSoFar = Double.MAX_VALUE;
+        kimCount = 0;
+        dtwCount = 0;
+        keogh1Count = 0;
+        keogh2Count = 0;
     }
 
     /**
@@ -187,28 +191,56 @@ public class DTWCaculator {
         return result;
     }
 
-    public int matchQueryWithRawSeries(TimeSeries query, double[] candidate) {
-        return -1;
+    public boolean matchQueryWithRawSeries(TimeSeries query, double[] candidate) {
+        return false;
     }
 
-    public int matchQueryWithNormedSeries(TimeSeries query, TimeSeries candidate) {
+    /**
+     * Check if this candidate is the nearest time series of query.
+     * You should run this method for each series in your data set,
+     * And make sure call reset if you want to change the query.<br/>
+     * example:<br/>
+     * TimeSeries nearest = null; <br/>
+     * for (TimeSeries c: dataSet) { <br/>
+     * &nbsp;&nbsp;&nbsp;&nbsp;nearest = matchQueryWithNormedSeries(query, c) ? c : nearest;<br/>}
+     * @param query
+     * @param candidate
+     * @return if this candidate is your nearest candidate
+     */
+    public boolean matchQueryWithNormedSeries(TimeSeries query, TimeSeries candidate) {
         if (lbKimOnNormed(query, candidate.data, 0) > bestSoFar) {
             kimCount++; // use lb_kim trim
-            return -1;
+            return false;
         }
         // calculate lb_keogh
         double lb_keogh1 = lbKeogh1OnNormed(query, candidate.data, 0);
         if (lb_keogh1 > bestSoFar) {
             keogh1Count++; //use lb_keogh trim
-            return -1;
+            return false;
         }
         double lb_keogh2 = lbKeogh2OnNormed(query, candidate.envelop, 0);
         if (lb_keogh2 > bestSoFar) {
             keogh2Count++;
-            return -1;
+            return false;
         }
-
-        return -1;
+        dtwCount++;
+        if (lb_keogh1 > lb_keogh2) {
+            choosedBound[queryLen - 1] = keogh1Bound[queryLen - 1];
+            for (int k = queryLen - 2; k >= 0; k--) {
+                choosedBound[k] = choosedBound[k + 1] + keogh1Bound[k];
+            }
+        }else {
+            choosedBound[queryLen - 1] = keogh2Bound[queryLen - 1];
+            for (int k = queryLen - 2; k >= 0; k--) {
+                choosedBound[k] = choosedBound[k + 1] + keogh2Bound[k];
+            }
+        }
+        double dist = DTW(query, candidate.data, choosedBound);
+        if (dist < bestSoFar) {
+            bestSoFar = dist;
+            return true;
+        }
+        return false;
     }
 
     public int matchQueryWithLongNormedSeries(TimeSeries query, TimeSeries candidate) {
@@ -368,6 +400,10 @@ public class DTWCaculator {
 
     public void setBestSoFar(double bestSoFar) {
         this.bestSoFar = bestSoFar;
+    }
+
+    public double getBestSoFar() {
+        return bestSoFar;
     }
 
     private double DTW(TimeSeries query, double[] normedC, double[] bound) {
