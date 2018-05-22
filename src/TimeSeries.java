@@ -22,7 +22,17 @@ public class TimeSeries {
         }
     }
 
-    public void initAsQuery() {
+    public void initAsCand(boolean needNorm) {
+        if (needNorm) {
+            normalization();
+        }
+        envelop = new TimeSeriesEnvelop(data, bandWidth);
+    }
+
+    public void initAsQuery(boolean needNorm) {
+        if (needNorm) {
+            normalization();
+        }
         ArrayList<DataIndex> indexes = new ArrayList<>(data.length);
         for (int i = 0; i < data.length; i++) {
             indexes.add(new DataIndex(data[i], i));
@@ -47,6 +57,20 @@ public class TimeSeries {
             orderedData[i] = data[order[i]];
             orderedLowerEnvelop[i] = getLowerEnvelop()[order[i]];
             orderedUpperEnvelop[i] = getUpperEnvelop()[order[i]];
+        }
+    }
+
+    private void normalization() {
+        double sum = 0;
+        double squareSum = 0;
+        for (int j = 0; j < data.length; j++) {
+            sum += data[j];
+            squareSum += data[j] * data[j];
+        }
+        double mean = sum / data.length;
+        double std = Math.sqrt(squareSum / data.length - mean * mean);
+        for (int j = 0; j < data.length; j++) {
+            data[j] = (data[j] - mean) / std;
         }
     }
 

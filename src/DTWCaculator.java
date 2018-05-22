@@ -192,6 +192,48 @@ public class DTWCaculator {
     }
 
     public boolean matchQueryWithRawSeries(TimeSeries query, double[] candidate) {
+        double sum = 0;
+        double squareSum = 0;
+        for (int i = 0; i < queryLen; i++) {
+            sum += candidate[i];
+            squareSum += candidate[i] * candidate[i];
+        }
+        double mean = sum / queryLen;
+        double std = Math.sqrt(squareSum / queryLen - mean * mean);
+
+        if (lbKimOnRaw(query, candidate, 0, mean, std) > bestSoFar) {
+            kimCount++; // use lb_kim trim
+            return false;
+        }
+        // calculate lb_keogh
+        double lb_keogh1 = lbKeogh1OnRaw(query, candidate, 0, mean, std);
+        if (lb_keogh1 > bestSoFar) {
+            keogh1Count++; //use lb_keogh trim
+            return false;
+        }
+        TimeSeriesEnvelop envelop = new TimeSeriesEnvelop(candidate, width);
+        double lb_keogh2 = lbKeogh2OnRaw(query, envelop, 0, mean, std);
+        if (lb_keogh2 > bestSoFar) {
+            keogh2Count++;
+            return false;
+        }
+        dtwCount++;
+        if (lb_keogh1 > lb_keogh2) {
+            choosedBound[queryLen - 1] = keogh1Bound[queryLen - 1];
+            for (int k = queryLen - 2; k >= 0; k--) {
+                choosedBound[k] = choosedBound[k + 1] + keogh1Bound[k];
+            }
+        }else {
+            choosedBound[queryLen - 1] = keogh2Bound[queryLen - 1];
+            for (int k = queryLen - 2; k >= 0; k--) {
+                choosedBound[k] = choosedBound[k + 1] + keogh2Bound[k];
+            }
+        }
+        double dist = DTW(query, candidate, choosedBound);
+        if (dist < bestSoFar) {
+            bestSoFar = dist;
+            return true;
+        }
         return false;
     }
 
@@ -241,10 +283,6 @@ public class DTWCaculator {
             return true;
         }
         return false;
-    }
-
-    public int matchQueryWithLongNormedSeries(TimeSeries query, TimeSeries candidate) {
-        return -1;
     }
 
     private double lbKimOnRaw(TimeSeries query, double[] rawC, int cStart, double mean, double std){

@@ -3,7 +3,6 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedList;
 
-// TODO Serialize this class
 public class TimeSeriesEnvelop {
     public double[] upperEnvelop;
     public double[] lowerEnvelop;
