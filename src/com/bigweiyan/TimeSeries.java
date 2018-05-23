@@ -1,3 +1,5 @@
+package com.bigweiyan;
+
 import java.util.ArrayList;
 
 public class TimeSeries {

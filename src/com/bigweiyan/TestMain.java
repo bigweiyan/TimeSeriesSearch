@@ -1,11 +1,18 @@
+package com.bigweiyan;
+
+import com.bigweiyan.strtree.LMBR;
+import com.bigweiyan.strtree.LMBRHelper;
+import com.bigweiyan.strtree.STRTree;
+import com.bigweiyan.strtree.STRTreeHelper;
+import com.bigweiyan.util.Pair;
+
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.Date;
-import java.util.Scanner;
+import java.util.*;
 
 public class TestMain {
     public static void main(String[] args){
-        testLMBR();
+        testSTRTree();
     }
 
     public static void testReader() {
@@ -32,6 +39,27 @@ public class TestMain {
         TimeSeriesEnvelop envelop = new TimeSeriesEnvelop(data, 0);
         LMBR mbr = helper.createLMBR(envelop);
 
+    }
+
+    public static void testSTRTree() {
+        double data[][] = new double[16][2];
+        for (int i = 0; i < 16; i++) {
+            data[15 - i][0] = i / 4;
+            data[15 - i][1] = i % 4;
+        }
+        ArrayList<TimeSeriesEnvelop> envelops = new ArrayList<>();
+        for (int i = 0; i < data.length; i++) {
+            envelops.add(new TimeSeriesEnvelop(data[i], 0));
+        }
+        ArrayList<Pair<Integer, LMBR>> pairs = new ArrayList<>();
+        LMBRHelper lmbrHelper = new LMBRHelper(2, 2);
+        lmbrHelper.setThreshold(1, 1);
+        for (int i = 0; i < envelops.size(); i++) {
+            pairs.add(new Pair<>(i, lmbrHelper.createLMBR(envelops.get(i))));
+        }
+        STRTreeHelper strTreeHelper = new STRTreeHelper(2);
+        STRTree tree = strTreeHelper.generateTreeFromMemory(pairs);
+        System.out.println();
     }
 
     public static void testQuery(){
@@ -93,6 +121,7 @@ public class TestMain {
             e.printStackTrace();
         }
     }
+
 
     private static void testManyQuery() {
         final int TRAIN_SIZE = 1000;

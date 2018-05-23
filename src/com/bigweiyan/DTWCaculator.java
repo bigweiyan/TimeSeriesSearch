@@ -1,3 +1,5 @@
+package com.bigweiyan;
+
 public class DTWCaculator {
     private int queryLen;
     private double bestSoFar;
