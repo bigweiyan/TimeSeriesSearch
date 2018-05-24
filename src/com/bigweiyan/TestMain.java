@@ -59,7 +59,13 @@ public class TestMain {
         }
         STRTreeHelper strTreeHelper = new STRTreeHelper(2);
         STRTree tree = strTreeHelper.generateTreeFromMemory(pairs);
-        System.out.println();
+        TimeSeriesIndexer indexer = new TimeSeriesIndexer(2,2);
+        try {
+            indexer.outputTree("D:/index", 0, tree);
+            indexer.getIndex("D:/index", 0);
+        }catch (IOException e){
+            e.printStackTrace();
+        }
     }
 
     public static void testQuery(){
@@ -189,6 +195,5 @@ public class TestMain {
         }
         System.out.print("wrong rate: ");
         System.out.println(wrongCount * 1.0 / TEST_SIZE);
-
     }
 }

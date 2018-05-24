@@ -1,5 +1,7 @@
 package com.bigweiyan;
 
+import com.bigweiyan.strtree.STRTree;
+
 public class DTWCaculator {
     private int queryLen;
     private double bestSoFar;
@@ -287,6 +289,10 @@ public class DTWCaculator {
         return false;
     }
 
+    public int treeSearch(TimeSeries query, STRTree tree) {
+        return -1;
+    }
+
     private double lbKimOnRaw(TimeSeries query, double[] rawC, int cStart, double mean, double std){
         double result;
         double first0 = (rawC[cStart] - mean) / std;
@@ -441,7 +447,6 @@ public class DTWCaculator {
     public void setBestSoFar(double bestSoFar) {
         this.bestSoFar = bestSoFar;
     }
-
     public double getBestSoFar() {
         return bestSoFar;
     }
@@ -495,15 +500,12 @@ public class DTWCaculator {
     private double distance(double a, double b) {
         return (a - b) * (a - b);
     }
-
     private double min(double a, double b){
         return a < b ? a : b;
     }
-
     private int min(int a, int b) {
         return a < b ? a : b;
     }
-
     private int max(int a, int b) {
         return a > b ? a : b;
     }
