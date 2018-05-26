@@ -9,7 +9,7 @@ public class TimeSeriesLoader {
     private TimeSeriesRawReader rawReader;
     public TimeSeriesLoader(String fileName) {
         this.fileName = fileName;
-        rawReader = new TimeSeriesRawReader(fileName + ".odt", "r", TimeSeriesRawReader.TYPE_MAPPEDDATA);
+        rawReader = new TimeSeriesRawReader(fileName + ".odt", "r", TimeSeriesRawReader.TYPE_MAPPED_DATA);
         loadMap();
     }
 

@@ -4,6 +4,7 @@ import com.bigweiyan.strtree.LMBR;
 import com.bigweiyan.strtree.LMBRHelper;
 import com.bigweiyan.strtree.STRTree;
 import com.bigweiyan.strtree.STRTreeHelper;
+import com.bigweiyan.util.BitTool;
 import com.bigweiyan.util.Pair;
 
 import java.io.FileInputStream;
@@ -12,10 +13,9 @@ import java.util.*;
 
 public class TestMain {
     public static void main(String[] args){
-        testQuery();
         testIndex();
         testQueryTree();
-//        testIO();
+        testQuery();
     }
 
     public static void testReader() {
@@ -155,13 +155,13 @@ public class TestMain {
     }
 
     public static void testIO() {
-        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10,20);
+        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10,40);
         try {
-            indexer.printIndex("D:/index", "ItalyPowerDemand_TRAIN");
+            indexer.printIndex("D:/index", "Data00000");
         }catch (IOException e) {
             e.printStackTrace();
         }
-        TimeSeriesRawReader timeSeriesRawReader = new TimeSeriesRawReader("D:/index/ItalyPowerDemand_TRAIN.edt", "r", TimeSeriesRawReader.TYPE_EXCEPTION);
+        TimeSeriesRawReader timeSeriesRawReader = new TimeSeriesRawReader("D:/index/Data00000.edt", "r", TimeSeriesRawReader.TYPE_EXCEPTION);
         Pair<double[][], Integer[]> pairs = timeSeriesRawReader.readExceptions();
         for (int i = 0; i < pairs.getValue().length; i++) {
             System.out.println("key: " + pairs.getValue()[i]);
@@ -171,7 +171,7 @@ public class TestMain {
             System.out.println("\n");
         }
         timeSeriesRawReader.close();
-        timeSeriesRawReader = new TimeSeriesRawReader("D:/index/ItalyPowerDemand_TRAIN.odt", "r", TimeSeriesRawReader.TYPE_MAPPEDDATA);
+        timeSeriesRawReader = new TimeSeriesRawReader("D:/index/Data00000.odt", "r", TimeSeriesRawReader.TYPE_MAPPED_DATA);
         double[][] orderedData = timeSeriesRawReader.readAll();
         timeSeriesRawReader.close();
         for (int i = 0; i < orderedData.length; i++) {
@@ -253,8 +253,10 @@ public class TestMain {
     }
 
     public static void testIndex(){
+        Date date = new Date();
         TimeSeriesIndexer indexer = new TimeSeriesIndexer(10, 40);
         indexer.creatIndex("D:/test", "D:/index", 4.0f,
                 0.03f, 0.1f, false, " ");
+        System.out.println("index time:" + Long.toString(new Date().getTime() - date.getTime()));
     }
 }
