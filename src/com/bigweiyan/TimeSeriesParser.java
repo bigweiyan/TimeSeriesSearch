@@ -3,13 +3,12 @@ package com.bigweiyan;
 import java.util.ArrayList;
 import java.util.Scanner;
 
-public class TimeSeriesReader {
+public class TimeSeriesParser {
     private String divider;
     private int seriesLen;
 
-    public TimeSeriesReader(String divider) {
+    public TimeSeriesParser(String divider) {
         this.divider = divider;
-        this.seriesLen = 100;
     }
 
     /**
@@ -17,7 +16,7 @@ public class TimeSeriesReader {
      * @param divider the divider between two numbers
      * @param seriesLen information of series length(not have to be exactly)
      */
-    public TimeSeriesReader(String divider, int seriesLen) {
+    public TimeSeriesParser(String divider, int seriesLen) {
         this.divider = divider;
         this.seriesLen = seriesLen;
     }
@@ -95,4 +94,5 @@ public class TimeSeriesReader {
         }
         return result;
     }
+
 }

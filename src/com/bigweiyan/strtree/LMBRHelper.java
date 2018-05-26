@@ -16,14 +16,14 @@ public class LMBRHelper {
      * bound<br/>
      * when this threshold is conflict with <b>usageThreshold</b> ,we give up on this one
      */
-    private double diffThreshold = 5;
+    private float diffThreshold = 5;
 
     /**
      * for each dimension pair, we should use more than usageThreshold percentage of envelop in the span so we can get
      * reasonable lower bound<br/>
      * when this threshold is conflict with <b>diffThreshold</b> ,we make sure this one
      */
-    private double usageThreshold = 1;
+    private float usageThreshold = 1;
 
     public LMBRHelper(int length, int segment) {
         if (length <= 0 || segment > length) {
@@ -38,7 +38,7 @@ public class LMBRHelper {
         startPos[segment] = length;
     }
 
-    public void setThreshold(double diffThreshold, double usageThreshold) {
+    public void setThreshold(float diffThreshold, float usageThreshold) {
         this.diffThreshold = diffThreshold;
         this.usageThreshold = usageThreshold;
     }
@@ -91,7 +91,7 @@ public class LMBRHelper {
         for (int i = 0; i < segment; i++) {
             tmpMax =  - Double.MAX_VALUE;
             tmpMin = Double.MAX_VALUE;
-            int usageTh = (int)(usageThreshold * startPos[i + 1] - startPos[i]);
+            int usageTh = (int)(usageThreshold * (startPos[i + 1] - startPos[i]));
             for (int j = startPos[i]; j < startPos[i + 1]; j++) {
                 if (tmpMax < envelopInput.upperEnvelop[j]) tmpMax = envelopInput.upperEnvelop[j];
                 if (tmpMin > envelopInput.lowerEnvelop[j]) tmpMin = envelopInput.lowerEnvelop[j];

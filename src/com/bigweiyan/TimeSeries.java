@@ -24,6 +24,11 @@ public class TimeSeries {
         }
     }
 
+    public TimeSeries(double timeSeries[], int width) {
+        this.data = timeSeries;
+        this.bandWidth = width;
+    }
+
     public void initAsCand(boolean needNorm) {
         if (needNorm) {
             normalization();

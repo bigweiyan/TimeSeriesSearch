@@ -12,11 +12,13 @@ import java.util.*;
 
 public class TestMain {
     public static void main(String[] args){
-        testSTRTree();
+        testQuery();
+        testIndex();
+        testQueryTree();
     }
 
     public static void testReader() {
-        TimeSeriesReader reader = new TimeSeriesReader(" ");
+        TimeSeriesParser reader = new TimeSeriesParser(" ");
         String input = "  0.0000000e+000 -4.3256481e-001 -2.0981492e+000 -1.9728169e+000 -1.6851405e+000 -2.8316118e+000" +
                 " -1.6406963e+000 -4.5153215e-001 -4.8916542e-001 -1.6187306e-001  1.2766081e-002 -1.7394250e-001";
         double result[] = reader.readSeries(input);
@@ -35,17 +37,22 @@ public class TestMain {
                 1.3698,1.4644,1.0546,
                 0.58181,0.17205,-0.26923};
         LMBRHelper helper = new LMBRHelper(data.length,8);
-        helper.setThreshold(1.5, 0.5);
+        helper.setThreshold(1.5f, 0.5f);
         TimeSeriesEnvelop envelop = new TimeSeriesEnvelop(data, 0);
         LMBR mbr = helper.createLMBR(envelop);
 
     }
 
     public static void testSTRTree() {
+
         double data[][] = new double[16][2];
         for (int i = 0; i < 16; i++) {
             data[15 - i][0] = i / 4;
             data[15 - i][1] = i % 4;
+        }
+        ArrayList<double[]> arrayList = new ArrayList<>();
+        for (int i = 0; i < data.length; i++) {
+            arrayList.add(data[i]);
         }
         ArrayList<TimeSeriesEnvelop> envelops = new ArrayList<>();
         for (int i = 0; i < data.length; i++) {
@@ -57,74 +64,121 @@ public class TestMain {
         for (int i = 0; i < envelops.size(); i++) {
             pairs.add(new Pair<>(i, lmbrHelper.createLMBR(envelops.get(i))));
         }
-        STRTreeHelper strTreeHelper = new STRTreeHelper(2);
-        STRTree tree = strTreeHelper.generateTreeFromMemory(pairs);
-        TimeSeriesIndexer indexer = new TimeSeriesIndexer(2,2);
+        STRTreeHelper strTreeHelper = new STRTreeHelper(6);
         try {
-            indexer.outputTree("D:/index", 0, tree);
-            indexer.getIndex("D:/index", 0);
+            STRTree tree = strTreeHelper.generateTreeFromMemory(pairs);
+            TimeSeriesIndexer indexer = new TimeSeriesIndexer(2,6);
+            indexer.outputTree("D:/index", "test", tree, arrayList);
+            indexer.printIndex("D:/index", "test");
         }catch (IOException e){
             e.printStackTrace();
         }
+
     }
 
     public static void testQuery(){
-        TimeSeriesReader reader = new TimeSeriesReader(" ");
+        TimeSeriesParser reader = new TimeSeriesParser(" ");
         TimeSeries query = null;
         double[] cand = null;
         try {
-            FileInputStream fileInputStream = new FileInputStream("Query.txt");
+            Date date = new Date();
+            FileInputStream fileInputStream = new FileInputStream("D:/query/query.txt");
             Scanner scanner = new Scanner(fileInputStream);
-            query = new TimeSeries(reader.readSeriesAndNormalize(scanner), 0.05f);
+            query = new TimeSeries(reader.readSeriesAndNormalize(scanner), 0.1f);
             scanner.close();
             fileInputStream.close();
-            fileInputStream = new FileInputStream("Data.txt");
+            query.initAsQuery(false);
+            DTWCalculator caculator = new DTWCalculator(query.getLength(), query.bandWidth);
+            fileInputStream = new FileInputStream("D:/test/Data00000");
             scanner = new Scanner(fileInputStream);
-            cand = reader.readSeries(scanner);
+            int current = -1;
+            int result = -1;
+            TimeSeries candidate;
+            while (scanner.hasNext()) {
+                current++;
+                cand = reader.readSeries(scanner);
+                candidate = new TimeSeries(cand, query.bandWidth);
+                candidate.initAsCand(false);
+                if (caculator.matchQueryWithNormedSeries(query, candidate)) {
+                    result = current;
+                }
+            }
             scanner.close();
             fileInputStream.close();
+            System.out.println("trillion result:" + result);
+            System.out.println("trillion time:" + Long.toString(new Date().getTime() - date.getTime()));
         }catch (IOException e) {
             e.printStackTrace();
         }
+    }
 
-        if (query == null || cand == null){
-            return;
+    public static void testQueryTree() {
+        STRTreeHelper helper = new STRTreeHelper(40);
+        TimeSeriesParser reader = new TimeSeriesParser(" ");
+        TimeSeries query = null;
+        STRTree tree = null;
+        try {
+            FileInputStream fileInputStream = new FileInputStream("D:/query/query.txt");
+            Scanner scanner = new Scanner(fileInputStream);
+            query = new TimeSeries(reader.readSeriesAndNormalize(scanner), 0.1f);
+            scanner.close();
+            fileInputStream.close();
+            query.initAsQuery(false);
+            tree = helper.generateTreeFromFile("D:/index","Data00000");
+        }catch (IOException e) {
+            e.printStackTrace();
         }
-        query.initAsQuery(false);
-        DTWCaculator caculator = new DTWCaculator(query.getLength(), query.bandWidth);
-        boolean result = caculator.matchQueryWithRawSeries(query, query.data);
-        System.out.println(caculator.getBestSoFar());
+        Date date = new Date();
+        DTWCalculator calculator = new DTWCalculator(query.getLength(), query.bandWidth);
+        TimeSeriesIO io = new TimeSeriesIO("D:/index/Data00000.edt", "r");
+        Pair<double[][], Integer[]> exceptions = io.readExceptions();
+        int result = 0;
+        for (int i = 0; i < exceptions.getKey().length; i++) {
+            TimeSeries candidate = new TimeSeries(exceptions.getKey()[i], 0.1f);
+            candidate.initAsCand(false);
+            if (calculator.matchQueryWithNormedSeries(query, candidate)) {
+                result = exceptions.getValue()[i];
+            }
+        }
+        System.out.println("exp search time:" + Long.toString(new Date().getTime() - date.getTime()));
+        TimeSeriesLoader loader = new TimeSeriesLoader("D:/index/Data00000");
+        Date searchTime = new Date();
+        int result2 = calculator.treeSearch(query, tree, loader);
+        System.out.println("tree search time:" + Long.toString(new Date().getTime() - searchTime.getTime()));
+        if (result2 != -1) {
+            System.out.println("my method tree:" + result2);
+        }else {
+            System.out.println("my method exp:" + result);
+        }
+
     }
 
     public static void testIO() {
+        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10,20);
         try {
-            Date date = new Date();
-            long current = date.getTime();
-            FileInputStream inputStream = new FileInputStream("Data.txt");
-            Scanner scanner = new Scanner(inputStream);
-            double cand[] = new double[1000000];
-            int i = 0;
-            while (scanner.hasNext()){
-                cand[i] = scanner.nextDouble();
-                i++;
-            }
-            System.out.println("phase 1 time: " + Long.toString(new Date().getTime() - current));
-            date = new Date();
-            current = date.getTime();
-            double sum = 0;
-            double squareSum = 0;
-            for (int j = 0; j < cand.length; j++) {
-                sum += cand[j];
-                squareSum += cand[j] * cand[j];
-            }
-            double mean = sum / cand.length;
-            double std = Math.sqrt(squareSum / cand.length - mean * mean);
-            for (int j = 0; j < cand.length; j++) {
-                cand[j] = (cand[j] - mean) / std;
-            }
-            System.out.println("phase 2 time: " +  Long.toString(new Date().getTime() - current));
+            indexer.printIndex("D:/index", "ItalyPowerDemand_TRAIN");
         }catch (IOException e) {
             e.printStackTrace();
+        }
+        TimeSeriesIO timeSeriesIO = new TimeSeriesIO("D:/index/ItalyPowerDemand_TRAIN.edt", "r");
+        Pair<double[][], Integer[]> pairs = timeSeriesIO.readExceptions();
+        for (int i = 0; i < pairs.getValue().length; i++) {
+            System.out.println("key: " + pairs.getValue()[i]);
+            for (int j = 0; j < pairs.getKey()[0].length; j++) {
+                System.out.print(pairs.getKey()[i][j] + " ");
+            }
+            System.out.println("\n");
+        }
+        timeSeriesIO.close();
+        timeSeriesIO = new TimeSeriesIO("D:/index/ItalyPowerDemand_TRAIN.odt", "r");
+        double[][] orderedData = timeSeriesIO.readAll();
+        timeSeriesIO.close();
+        for (int i = 0; i < orderedData.length; i++) {
+            System.out.println(i);
+            for (int j = 0; j < orderedData[0].length; j++) {
+                System.out.print(orderedData[i][j] + " ");
+            }
+            System.out.println("\n");
         }
     }
 
@@ -178,7 +232,7 @@ public class TestMain {
         }
 
         int wrongCount = 0;
-        DTWCaculator caculator = new DTWCaculator(LEN, train[0].bandWidth);
+        DTWCalculator caculator = new DTWCalculator(LEN, train[0].bandWidth);
         for (int i = 0; i < TEST_SIZE; i++) {
             caculator.reset();
             TimeSeries query = test[i];
@@ -195,5 +249,11 @@ public class TestMain {
         }
         System.out.print("wrong rate: ");
         System.out.println(wrongCount * 1.0 / TEST_SIZE);
+    }
+
+    public static void testIndex(){
+        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10, 40);
+        indexer.creatIndex("D:/test", "D:/index", 4.0f,
+                0.03f, 0.1f, false, " ");
     }
 }
