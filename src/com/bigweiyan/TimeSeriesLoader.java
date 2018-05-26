@@ -6,10 +6,10 @@ import java.io.RandomAccessFile;
 public class TimeSeriesLoader {
     private int[] map;
     private String fileName;
-    private TimeSeriesIO io;
+    private TimeSeriesRawReader rawReader;
     public TimeSeriesLoader(String fileName) {
         this.fileName = fileName;
-        io = new TimeSeriesIO(fileName + ".odt", "r");
+        rawReader = new TimeSeriesRawReader(fileName + ".odt", "r", TimeSeriesRawReader.TYPE_MAPPEDDATA);
         loadMap();
     }
 
@@ -28,10 +28,10 @@ public class TimeSeriesLoader {
     }
 
     public double[] getTSFromKey(int key) {
-        return io.read(map[key]);
+        return rawReader.read(map[key]);
     }
 
     public void close() {
-        io.close();
+        rawReader.close();
     }
 }

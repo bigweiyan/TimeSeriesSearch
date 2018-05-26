@@ -1,18 +1,24 @@
 package com.bigweiyan;
 
+import com.bigweiyan.util.BitTool;
 import com.bigweiyan.util.Pair;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.DoubleBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
-public class TimeSeriesIO {
+public class TimeSeriesRawReader {
     private RandomAccessFile file;
     private int seriesLen = 0;
     private int totalSeries = 0;
     private boolean isRead;
     public static final int HEADER = 8;
-    public TimeSeriesIO(String fileName, String mode) {
+    public static final int TYPE_EXCEPTION = 0;
+    public static final int TYPE_MAPPEDDATA = 1;
+    public TimeSeriesRawReader(String fileName, String mode, int dataType) {
         try {
             file = new RandomAccessFile(fileName, mode);
             if (mode.equals("r")) {
@@ -88,12 +94,14 @@ public class TimeSeriesIO {
 
     public double[] read(int pos) {
         double series[] = null;
-        FileChannel channel = file.getChannel();
+        int lineLength = 8 * seriesLen;
         try {
+            byte buffer[] = new byte[lineLength];
             file.seek(pos * 8 * seriesLen + HEADER);
             series = new double[seriesLen];
-            for (int i = 0; i < seriesLen; i++){
-                series[i] = file.readDouble();
+            file.read(buffer);
+            for (int j = 0; j < seriesLen; j++) {
+                series[j] = BitTool.bytesToDouble(buffer, j * 8);
             }
         }catch (IOException e) {
             e.printStackTrace();
@@ -104,14 +112,17 @@ public class TimeSeriesIO {
     public Pair<double[][], Integer[]> readExceptions(){
         double series[][] = null;
         Integer[] id = null;
+        int lineLength = seriesLen * 8 + 4;
         try {
             file.seek(HEADER);
+            byte buffer[] = new byte[lineLength];
             id = new Integer[totalSeries];
             series = new double[totalSeries][seriesLen];
-            for (int i = 0; i < totalSeries; i++){
-                id[i] = file.readInt();
+            for (int i = 0; i < totalSeries; i++) {
+                file.read(buffer);
+                id[i] = BitTool.bytesToInt(buffer, 0);
                 for (int j = 0; j < seriesLen; j++) {
-                    series[i][j] = file.readDouble();
+                    series[i][j] = BitTool.bytesToDouble(buffer, 4 + j * 8);
                 }
             }
         }catch (IOException e) {

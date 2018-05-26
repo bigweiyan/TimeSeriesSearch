@@ -15,6 +15,7 @@ public class TestMain {
         testQuery();
         testIndex();
         testQueryTree();
+//        testIO();
     }
 
     public static void testReader() {
@@ -130,7 +131,7 @@ public class TestMain {
         }
         Date date = new Date();
         DTWCalculator calculator = new DTWCalculator(query.getLength(), query.bandWidth);
-        TimeSeriesIO io = new TimeSeriesIO("D:/index/Data00000.edt", "r");
+        TimeSeriesRawReader io = new TimeSeriesRawReader("D:/index/Data00000.edt", "r", TimeSeriesRawReader.TYPE_EXCEPTION);
         Pair<double[][], Integer[]> exceptions = io.readExceptions();
         int result = 0;
         for (int i = 0; i < exceptions.getKey().length; i++) {
@@ -160,8 +161,8 @@ public class TestMain {
         }catch (IOException e) {
             e.printStackTrace();
         }
-        TimeSeriesIO timeSeriesIO = new TimeSeriesIO("D:/index/ItalyPowerDemand_TRAIN.edt", "r");
-        Pair<double[][], Integer[]> pairs = timeSeriesIO.readExceptions();
+        TimeSeriesRawReader timeSeriesRawReader = new TimeSeriesRawReader("D:/index/ItalyPowerDemand_TRAIN.edt", "r", TimeSeriesRawReader.TYPE_EXCEPTION);
+        Pair<double[][], Integer[]> pairs = timeSeriesRawReader.readExceptions();
         for (int i = 0; i < pairs.getValue().length; i++) {
             System.out.println("key: " + pairs.getValue()[i]);
             for (int j = 0; j < pairs.getKey()[0].length; j++) {
@@ -169,10 +170,10 @@ public class TestMain {
             }
             System.out.println("\n");
         }
-        timeSeriesIO.close();
-        timeSeriesIO = new TimeSeriesIO("D:/index/ItalyPowerDemand_TRAIN.odt", "r");
-        double[][] orderedData = timeSeriesIO.readAll();
-        timeSeriesIO.close();
+        timeSeriesRawReader.close();
+        timeSeriesRawReader = new TimeSeriesRawReader("D:/index/ItalyPowerDemand_TRAIN.odt", "r", TimeSeriesRawReader.TYPE_MAPPEDDATA);
+        double[][] orderedData = timeSeriesRawReader.readAll();
+        timeSeriesRawReader.close();
         for (int i = 0; i < orderedData.length; i++) {
             System.out.println(i);
             for (int j = 0; j < orderedData[0].length; j++) {

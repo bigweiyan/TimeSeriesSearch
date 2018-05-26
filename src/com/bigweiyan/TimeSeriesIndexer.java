@@ -69,9 +69,9 @@ public class TimeSeriesIndexer {
                     ids[i] = exceptions.get(i);
                     System.arraycopy(data.get(ids[i]), 0, exception[i], 0, data.get(0).length);
                 }
-                TimeSeriesIO timeSeriesIO = new TimeSeriesIO(indexFolder + "/" + dataFile.getName() + ".edt", "rw");
-                timeSeriesIO.saveAllException(exception,ids);
-                timeSeriesIO.close();
+                TimeSeriesRawReader timeSeriesRawReader = new TimeSeriesRawReader(indexFolder + "/" + dataFile.getName() + ".edt", "rw", TimeSeriesRawReader.TYPE_EXCEPTION);
+                timeSeriesRawReader.saveAllException(exception,ids);
+                timeSeriesRawReader.close();
 
                 try {
                     //save classes
@@ -130,12 +130,12 @@ public class TimeSeriesIndexer {
         RandomAccessFile mapFile = new RandomAccessFile(indexFolder + "/" + indexName + ".map", "rw");
         mapFile.writeInt(datas.size());
         idxFile.writeInt(seriesList.size());
-        TimeSeriesIO timeSeriesIO = new TimeSeriesIO(indexFolder + "/" + indexName + ".odt", "rw");
+        TimeSeriesRawReader timeSeriesRawReader = new TimeSeriesRawReader(indexFolder + "/" + indexName + ".odt", "rw", TimeSeriesRawReader.TYPE_MAPPEDDATA);
         for (int i = 0; i < seriesList.size(); i++) {
             outPutLMBR(idxFile, seriesList.get(i),mapFile);
-            timeSeriesIO.save(datas.get(seriesList.get(i).getKey()));
+            timeSeriesRawReader.save(datas.get(seriesList.get(i).getKey()));
         }
-        timeSeriesIO.close();
+        timeSeriesRawReader.close();
         idxFile.close();
         mapFile.close();
     }
