@@ -90,7 +90,7 @@ public class TestMain {
             fileInputStream.close();
             query.initAsQuery(false);
             DTWCalculator caculator = new DTWCalculator(query.getLength(), query.bandWidth);
-            fileInputStream = new FileInputStream("D:/test/Data00000");
+            fileInputStream = new FileInputStream("D:/test/Data5000");
             scanner = new Scanner(fileInputStream);
             int current = -1;
             int result = -1;
@@ -114,6 +114,7 @@ public class TestMain {
     }
 
     public static void testQueryTree() {
+        Date start = new Date();
         STRTreeHelper helper = new STRTreeHelper(40);
         TimeSeriesParser reader = new TimeSeriesParser(" ");
         TimeSeries query = null;
@@ -125,13 +126,14 @@ public class TestMain {
             scanner.close();
             fileInputStream.close();
             query.initAsQuery(false);
-            tree = helper.generateTreeFromFile("D:/index","Data00000");
+            tree = helper.generateTreeFromFile("D:/index","Data5000");
         }catch (IOException e) {
             e.printStackTrace();
         }
+        System.out.println("index io time:" + Long.toString(new Date().getTime() - start.getTime()));
         Date date = new Date();
         DTWCalculator calculator = new DTWCalculator(query.getLength(), query.bandWidth);
-        TimeSeriesRawReader io = new TimeSeriesRawReader("D:/index/Data00000.edt", "r", TimeSeriesRawReader.TYPE_EXCEPTION);
+        TimeSeriesRawReader io = new TimeSeriesRawReader("D:/index/Data5000.edt", "r", TimeSeriesRawReader.TYPE_EXCEPTION);
         Pair<double[][], Integer[]> exceptions = io.readExceptions();
         int result = 0;
         for (int i = 0; i < exceptions.getKey().length; i++) {
@@ -142,7 +144,7 @@ public class TestMain {
             }
         }
         System.out.println("exp search time:" + Long.toString(new Date().getTime() - date.getTime()));
-        TimeSeriesLoader loader = new TimeSeriesLoader("D:/index/Data00000");
+        TimeSeriesLoader loader = new TimeSeriesLoader("D:/index/Data5000");
         Date searchTime = new Date();
         int result2 = calculator.treeSearch(query, tree, loader);
         System.out.println("tree search time:" + Long.toString(new Date().getTime() - searchTime.getTime()));

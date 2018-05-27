@@ -22,6 +22,7 @@ public class TimeSeriesIndexer {
         this.treeDegree = treeDegree;
     }
 
+    // TODO it's still a in-memory index algorithm; try to make it on disk by making data and envelope on disk
     public void creatIndex(String inputFolder, String indexFolder, float diffThreshold, float usageThreshold,
                            float bandRate, boolean haveLabel, String divider) {
         ArrayList<String> labels = null;
