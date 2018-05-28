@@ -4,9 +4,11 @@ import com.bigweiyan.strtree.LMBR;
 import com.bigweiyan.strtree.STRTree;
 import com.bigweiyan.util.Pair;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedList;
+import java.util.PriorityQueue;
 
 public class DTWCalculator {
     private int queryLen;
@@ -295,7 +297,7 @@ public class DTWCalculator {
         return false;
     }
 
-    public int treeSearch(TimeSeries query, STRTree tree, TimeSeriesLoader loader) {
+    public int treeSearch(TimeSeries query, STRTree tree, MappedTimeSeriesLoader loader) throws IOException {
         if (tree == null)
             return -1;
         int result = -1;
@@ -309,6 +311,7 @@ public class DTWCalculator {
         startPos[0] = 0;
         startPos[segment] = length;
         Deque<Object> candidates = new LinkedList<>();
+        //PriorityQueue<Object> candidates = new PriorityQueue<>();
         candidates.offerLast(tree);
         while (!candidates.isEmpty()) {
             if (candidates.peekFirst().getClass() == STRTree.class) {
@@ -331,6 +334,7 @@ public class DTWCalculator {
                     if (treeCand.isLeaf){
                         for (int i = 0; i < treeCand.series.length; i++) {
                             candidates.offerFirst(treeCand.series[i]);
+                            // TODO import priority tree to save children
                         }
                     }else {
                         for (int i = 0; i < treeCand.children.length; i++) {

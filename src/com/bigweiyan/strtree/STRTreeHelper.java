@@ -220,6 +220,7 @@ public class STRTreeHelper {
         return node;
     }
 
+    // TODO make this method buffered
     private STRTree createTreeFromLine(int lineNo, @NotNull RandomAccessFile treFile, @NotNull RandomAccessFile idxFile)
             throws IOException{
         STRTree node = new STRTree();

@@ -24,18 +24,42 @@ public class TimeSeriesIndexer {
 
     // TODO it's still a in-memory index algorithm; try to make it on disk by making data and envelope on disk
     public void creatIndex(String inputFolder, String indexFolder, float diffThreshold, float usageThreshold,
-                           float bandRate, boolean haveLabel, String divider) {
-        ArrayList<String> labels = null;
+                           float bandRate, boolean haveLabel, String divider) throws IOException{
         File file = new File(inputFolder);
         for (File dataFile:file.listFiles()) {
             if (dataFile.isFile()) {
                 // input data
-                ArrayList<double[]> data = new ArrayList<>();
-                try {
-                    Scanner scanner = new Scanner(new FileInputStream(dataFile));
-                    TimeSeriesParser reader = new TimeSeriesParser(divider);
-                    labels = new ArrayList<>();
-                    String line;
+                ArrayList<Integer> exceptionIDs = new ArrayList<>();
+                ArrayList<Pair<Integer, LMBR>> lmbrAndIds = new ArrayList<>();
+                ArrayList<String> labels = new ArrayList<>();
+                int seriesLength = 0;
+                Scanner scanner = new Scanner(new FileInputStream(dataFile));
+                TimeSeriesParser reader = new TimeSeriesParser(divider);
+                String line;
+                TimeSeriesRawIO rawWriter;
+                TimeSeriesEnvelop currentEnvelop;
+                double currentData[];
+                LMBRHelper lmbrHelper;
+                int dataSize = 0;
+                // read data, split it into lmbrs and exceptions and then write it back
+                if (scanner.hasNext()) {
+                    line = scanner.nextLine();
+                    if (line.isEmpty()) break;
+                    if (haveLabel) {
+                        String[] lines = line.split(divider, 2);
+                        line = lines[1];
+                        labels.add(lines[0]);
+                    }
+                    currentData = reader.readSeries(line);
+                    seriesLength = currentData.length;
+                    rawWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw", false,
+                            TimeSeriesRawIO.TYPE_PURE_DATA, 1000, seriesLength);
+                    rawWriter.bufferedWrite(currentData);
+                    currentEnvelop = new TimeSeriesEnvelop(currentData, bandRate);
+                    lmbrHelper = new LMBRHelper(currentEnvelop.lowerEnvelop.length, lmbrDim);
+                    lmbrHelper.setThreshold(diffThreshold, usageThreshold);
+                    lmbrHelper.testLMBR(currentEnvelop, dataSize, lmbrAndIds, exceptionIDs);
+                    dataSize++;
                     while (scanner.hasNext()){
                         line = scanner.nextLine();
                         if (line.isEmpty()) break;
@@ -44,73 +68,63 @@ public class TimeSeriesIndexer {
                             line = lines[1];
                             labels.add(lines[0]);
                         }
-                        data.add(reader.readSeries(line));
+                        currentData = reader.readSeries(line);
+                        rawWriter.bufferedWrite(currentData);
+                        currentEnvelop = new TimeSeriesEnvelop(currentData, bandRate);
+                        lmbrHelper.testLMBR(currentEnvelop, dataSize, lmbrAndIds, exceptionIDs);
+                        dataSize++;
                     }
-                    scanner.close();
-                }catch (IOException e) {
-                    e.printStackTrace();
+                    rawWriter.close();
+                }else {
+                    throw new IllegalArgumentException("file format isn't right");
                 }
-                // create envelop
-                TimeSeriesEnvelop envelops[] = new TimeSeriesEnvelop[data.size()];
-                for (int i = 0; i < envelops.length; i++) {
-                    envelops[i] = new TimeSeriesEnvelop(data.get(i), bandRate);
-                }
-                // create lmbrs and exceptions
-                ArrayList<Integer> exceptions = new ArrayList<>(envelops.length);
-                ArrayList<Pair<Integer, LMBR>> lmbrs = new ArrayList<>(envelops.length);
-                LMBRHelper lmbrHelper = new LMBRHelper(envelops[0].lowerEnvelop.length, lmbrDim);
-                lmbrHelper.setThreshold(diffThreshold, usageThreshold);
-                for (int i = 0; i < envelops.length; i++) {
-                    lmbrHelper.testLMBR(envelops[i], i, lmbrs, exceptions);
-                }
-                System.out.println("exceptions: " + exceptions.size() + ", mbrs: " + lmbrs.size());
-                // save exceptions
-                double[][] exception = new double[exceptions.size()][data.get(0).length];
-                int[] ids = new int[exceptions.size()];
-                for (int i = 0; i < exceptions.size(); i++) {
-                    ids[i] = exceptions.get(i);
-                    System.arraycopy(data.get(ids[i]), 0, exception[i], 0, data.get(0).length);
-                }
-                TimeSeriesRawReader timeSeriesRawReader = new TimeSeriesRawReader(
-                        indexFolder + "/" + dataFile.getName() + ".edt", "rw", TimeSeriesRawReader.TYPE_EXCEPTION);
-                timeSeriesRawReader.saveAllException(exception,ids);
-                timeSeriesRawReader.close();
+                scanner.close();
+                System.out.println("exceptions: " + exceptionIDs.size() + ", mbrs: " + lmbrAndIds.size());
 
-                try {
-                    //save classes
-                    if (haveLabel) {
-                        FileWriter writer = new FileWriter(indexFolder + "/" + dataFile.getName() + ".clz");
-                        writer.write(labels.get(0));
-                        for (int i = 0; i < labels.size(); i++) {
-                            writer.write(divider);
-                            writer.write(labels.get(i));
-                        }
-                        writer.close();
+                // save exceptions
+                TimeSeriesRawIO exceptionsWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".edt",
+                        false, TimeSeriesRawIO.TYPE_EXCEPTION, 1000, seriesLength);
+                TimeSeriesRawIO rawReader = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw",
+                        true, TimeSeriesRawIO.TYPE_PURE_DATA, 1000);
+                for (int i = 0; i < exceptionIDs.size(); i++) {
+                    int pos = exceptionIDs.get(i);
+                    exceptionsWriter.bufferedWriteException(rawReader.bufferedRead(pos), pos);
+                }
+
+                exceptionsWriter.close();
+
+                //save classes
+                if (haveLabel) {
+                    BufferedWriter writer = new BufferedWriter(new FileWriter(indexFolder + "/" + dataFile.getName() + ".clz"), 2048);
+                    writer.write(labels.get(0));
+                    for (int i = 0; i < labels.size(); i++) {
+                        writer.write(divider);
+                        writer.write(labels.get(i));
                     }
-                }catch (IOException e) {
-                    e.printStackTrace();
+                    writer.flush();
+                    writer.close();
                 }
 
                 // create and save tree
                 STRTreeHelper strTreeHelper = new STRTreeHelper(treeDegree);
-                STRTree tree = strTreeHelper.generateTreeFromMemory(lmbrs);
-                try {
-                    outputTree(indexFolder, dataFile.getName(), tree, data);
-                }catch (IOException e){
-                    e.printStackTrace();
-                }
+                STRTree tree = strTreeHelper.generateTreeFromMemory(lmbrAndIds);
+                outputTree(indexFolder, dataFile.getName(), tree, rawReader, dataSize, seriesLength);
+                rawReader.close();
             }
         }
     }
 
-    public void outputTree(String indexFolder, String indexName, STRTree tree, ArrayList<double[]> datas) throws IOException {
-        RandomAccessFile treFile = new RandomAccessFile(indexFolder + "/" + indexName + ".tre", "rw");
+    public void outputTree(String indexFolder, String indexName, STRTree tree, TimeSeriesRawIO rawReader, int dataSize,
+                           int seriesLength) throws IOException {
+        int size = 500;
+        int lineLength = lmbrDim * 20 + treeDegree * 4 + 1;
+        BufferedOutputStream treSteam = new BufferedOutputStream(new FileOutputStream(indexFolder + "/" + indexName + ".tre"), lineLength * size);
         byte tmp[] = new byte[12];
         BitTool.intToBytes(lmbrDim, tmp, 0);
         BitTool.intToBytes(treeDegree, tmp, 4);
         for (int i = 0; i < 4; i++)
             tmp[8 + i] = 0;
-        treFile.write(tmp);
+        treSteam.write(tmp);
         Deque<Pair<STRTree, Integer>> nodeQueue = new LinkedList<>();
         List<Pair<Integer, LMBR>> seriesList = new LinkedList<>();
         nodeQueue.addLast(new Pair<>(tree, 0));
@@ -121,32 +135,44 @@ public class TimeSeriesIndexer {
             if (next.getKey().getClass() == STRTree.class) {
                 STRTree node = next.getKey();
                 if (node.isLeaf) {
-                    outPutLeafNode(treFile, node, seriesList);
+                    outPutLeafNode(treSteam, node, seriesList);
                 }else {
-                    outPutInnerNode(treFile, node, nodeQueue);
+                    outPutInnerNode(treSteam, node, nodeQueue);
                 }
             }
             nodeQueue.pollFirst();
         }
+        treSteam.flush();
+        treSteam.close();
+        RandomAccessFile treFile = new RandomAccessFile(indexFolder + "/" + indexName + ".tre", "rw");
         treFile.seek(8);
         treFile.writeInt(totalLength);
         treFile.close();
 
-        RandomAccessFile idxFile = new RandomAccessFile(indexFolder + "/" + indexName + ".idx", "rw");
-        RandomAccessFile mapFile = new RandomAccessFile(indexFolder + "/" + indexName + ".map", "rw");
-        mapFile.writeInt(datas.size());
-        idxFile.writeInt(seriesList.size());
-        TimeSeriesRawReader timeSeriesRawReader = new TimeSeriesRawReader(indexFolder + "/" + indexName + ".odt", "rw", TimeSeriesRawReader.TYPE_MAPPED_DATA);
+        lineLength = lmbrDim * 20 + 4;
+        BufferedOutputStream idxStream = new BufferedOutputStream(
+                new FileOutputStream(indexFolder + "/" + indexName + ".idx"), lineLength * size);
+        BufferedOutputStream mapStream = new BufferedOutputStream(
+                new FileOutputStream(indexFolder + "/" + indexName + ".map"), 4 * size);
+        byte intTemp[] = new byte[4];
+        BitTool.intToBytes(dataSize, intTemp, 0);
+        mapStream.write(intTemp);
+        BitTool.intToBytes(seriesList.size(), intTemp, 0);
+        idxStream.write(intTemp);
+        TimeSeriesRawIO timeSeriesRawIO = new TimeSeriesRawIO(indexFolder + "/" + indexName + ".odt",
+                false, TimeSeriesRawIO.TYPE_PURE_DATA, 1000, seriesLength);
         for (int i = 0; i < seriesList.size(); i++) {
-            outPutLMBR(idxFile, seriesList.get(i),mapFile);
-            timeSeriesRawReader.save(datas.get(seriesList.get(i).getKey()));
+            outPutLMBR(idxStream, seriesList.get(i),mapStream);
+            timeSeriesRawIO.bufferedWrite(rawReader.bufferedRead(seriesList.get(i).getKey()));
         }
-        timeSeriesRawReader.close();
-        idxFile.close();
-        mapFile.close();
+        timeSeriesRawIO.close();
+        idxStream.flush();
+        idxStream.close();
+        mapStream.flush();
+        mapStream.close();
     }
 
-    private void outPutInnerNode(RandomAccessFile file, STRTree innerNode,
+    private void outPutInnerNode(BufferedOutputStream nodeStream, STRTree innerNode,
                                  Deque<Pair<STRTree, Integer>> nodeQueue) throws IOException {
         int lineLength = 1 + 20 * lmbrDim + treeDegree * 4;
         byte[] tmp = new byte[lineLength];
@@ -168,12 +194,13 @@ public class TimeSeriesIndexer {
             BitTool.intToBytes(-1, tmp, pos);
             pos += 4;
         }
-        file.write(tmp);
+        nodeStream.write(tmp);
     }
 
-    private void outPutLeafNode(RandomAccessFile file, STRTree leafNode,
+    private void outPutLeafNode(BufferedOutputStream nodeStream, STRTree leafNode,
                                 List<Pair<Integer, LMBR>> seriesQueue) throws IOException {
-        byte tmp[] = new byte[1 + 20 * lmbrDim + treeDegree * 4];
+        int lineLength = 1 + 20 * lmbrDim + treeDegree * 4;
+        byte tmp[] = new byte[lineLength];
         tmp[0] = TYPE_LEAF_NODE;
         int pos = 1;
         for (int i = 0; i < lmbrDim; i++) {
@@ -192,10 +219,10 @@ public class TimeSeriesIndexer {
             BitTool.intToBytes(-1, tmp, pos);
             pos += 4;
         } // this is degree * 4 bytes
-        file.write(tmp);
+        nodeStream.write(tmp);
     }
 
-    private void outPutLMBR(RandomAccessFile file, Pair<Integer, LMBR> series, RandomAccessFile mapFile) throws IOException{
+    private void outPutLMBR(BufferedOutputStream lmbrStream, Pair<Integer, LMBR> series, BufferedOutputStream mapStream) throws IOException{
         byte tmp[] = new byte[4 + lmbrDim * 20];
         BitTool.intToBytes(series.getKey(), tmp, 0);
         int pos = 4;
@@ -205,8 +232,10 @@ public class TimeSeriesIndexer {
             BitTool.intToBytes(series.getValue().weights[i], tmp, pos + 16);
             pos += 20;
         }
-        file.write(tmp);
-        mapFile.writeInt(series.getKey());
+        lmbrStream.write(tmp);
+        byte intTmp[] = new byte[4];
+        BitTool.intToBytes(series.getKey(), intTmp, 0);
+        mapStream.write(intTmp);
     }
 
     public void printIndex(String indexFolder, String indexName) throws IOException{
