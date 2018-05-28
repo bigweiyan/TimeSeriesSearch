@@ -1,4 +1,14 @@
-public class DTWCaculator {
+package com.bigweiyan;
+
+import com.bigweiyan.strtree.LMBR;
+import com.bigweiyan.strtree.STRTree;
+import com.bigweiyan.util.Pair;
+
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedList;
+
+public class DTWCalculator {
     private int queryLen;
     private double bestSoFar;
     private int kimCount;
@@ -10,7 +20,7 @@ public class DTWCaculator {
     private double choosedBound[];
     private int width;
 
-    public DTWCaculator(int queryLen, int width) {
+    public DTWCalculator(int queryLen, int width) {
         this.queryLen = queryLen;
         this.width = width;
         keogh1Bound = new double[queryLen];
@@ -192,6 +202,48 @@ public class DTWCaculator {
     }
 
     public boolean matchQueryWithRawSeries(TimeSeries query, double[] candidate) {
+        double sum = 0;
+        double squareSum = 0;
+        for (int i = 0; i < queryLen; i++) {
+            sum += candidate[i];
+            squareSum += candidate[i] * candidate[i];
+        }
+        double mean = sum / queryLen;
+        double std = Math.sqrt(squareSum / queryLen - mean * mean);
+
+        if (lbKimOnRaw(query, candidate, 0, mean, std) > bestSoFar) {
+            kimCount++; // use lb_kim trim
+            return false;
+        }
+        // calculate lb_keogh
+        double lb_keogh1 = lbKeogh1OnRaw(query, candidate, 0, mean, std);
+        if (lb_keogh1 > bestSoFar) {
+            keogh1Count++; //use lb_keogh trim
+            return false;
+        }
+        TimeSeriesEnvelop envelop = new TimeSeriesEnvelop(candidate, width);
+        double lb_keogh2 = lbKeogh2OnRaw(query, envelop, 0, mean, std);
+        if (lb_keogh2 > bestSoFar) {
+            keogh2Count++;
+            return false;
+        }
+        dtwCount++;
+        if (lb_keogh1 > lb_keogh2) {
+            choosedBound[queryLen - 1] = keogh1Bound[queryLen - 1];
+            for (int k = queryLen - 2; k >= 0; k--) {
+                choosedBound[k] = choosedBound[k + 1] + keogh1Bound[k];
+            }
+        }else {
+            choosedBound[queryLen - 1] = keogh2Bound[queryLen - 1];
+            for (int k = queryLen - 2; k >= 0; k--) {
+                choosedBound[k] = choosedBound[k + 1] + keogh2Bound[k];
+            }
+        }
+        double dist = DTW(query, candidate, choosedBound);
+        if (dist < bestSoFar) {
+            bestSoFar = dist;
+            return true;
+        }
         return false;
     }
 
@@ -243,8 +295,77 @@ public class DTWCaculator {
         return false;
     }
 
-    public int matchQueryWithLongNormedSeries(TimeSeries query, TimeSeries candidate) {
-        return -1;
+    public int treeSearch(TimeSeries query, STRTree tree, TimeSeriesLoader loader) {
+        if (tree == null)
+            return -1;
+        int result = -1;
+        // calculate lmbr related
+        int segment = tree.lmbr.upper.length;
+        int length = queryLen;
+        int startPos[] = new int[segment + 1];
+        for (int i = 1; i < segment; i++) {
+            startPos[i] = (int)(length * 1.0 * i / segment);
+        }
+        startPos[0] = 0;
+        startPos[segment] = length;
+        Deque<Object> candidates = new LinkedList<>();
+        candidates.offerLast(tree);
+        while (!candidates.isEmpty()) {
+            if (candidates.peekFirst().getClass() == STRTree.class) {
+                STRTree treeCand = (STRTree)candidates.pollFirst();
+                LMBR treeLmbr = treeCand.lmbr;
+                double lowerBound = 0;
+                int start = 0;
+                for (int i = 0; i < segment; i++) {
+                    for (int j = 0; j < treeLmbr.weights[i]; j++) {
+                        start = startPos[i];
+                        if (query.data[start + j] < treeLmbr.lower[i]){
+                            lowerBound += distance(query.data[start + j], treeLmbr.lower[i]);
+                        }else if (query.data[start + j] > treeLmbr.upper[i]) {
+                            lowerBound += distance(query.data[start + j], treeLmbr.upper[i]);
+                        }
+                    }
+                    if (lowerBound > bestSoFar) break;
+                }
+                if (lowerBound < bestSoFar) {
+                    if (treeCand.isLeaf){
+                        for (int i = 0; i < treeCand.series.length; i++) {
+                            candidates.offerFirst(treeCand.series[i]);
+                        }
+                    }else {
+                        for (int i = 0; i < treeCand.children.length; i++) {
+                            candidates.offerFirst(treeCand.children[i]);
+                        }
+                    }
+                }
+            }else if (candidates.peekFirst().getClass() == Pair.class) {
+                Pair<Integer, LMBR> pairCand = (Pair)candidates.pollFirst();
+                LMBR pairLmbr = pairCand.getValue();
+                double lowerBound = 0;
+                int start = 0;
+                for (int i = 0; i < segment; i++) {
+                    for (int j = 0; j < pairLmbr.weights[i]; j++) {
+                        start = startPos[i];
+                        if (query.data[start + j] < pairLmbr.lower[i]){
+                            lowerBound += distance(query.data[start + j], pairLmbr.lower[i]);
+                        }else if (query.data[start + j] > pairLmbr.upper[i]) {
+                            lowerBound += distance(query.data[start + j], pairLmbr.upper[i]);
+                        }
+                    }
+                    if (lowerBound > bestSoFar) break;
+                }
+                if (lowerBound < bestSoFar) {
+                    candidates.offerFirst(pairCand.getKey());
+                }
+            }else if (candidates.peekFirst().getClass() == Integer.class){
+                int key = (Integer) candidates.pollFirst();
+                TimeSeries timeSeries = new TimeSeries(loader.getTSFromKey(key), width);
+                timeSeries.initAsCand(false);
+                boolean isBetter = matchQueryWithNormedSeries(query, timeSeries);
+                if (isBetter) result = key;
+            }
+        }
+        return result;
     }
 
     private double lbKimOnRaw(TimeSeries query, double[] rawC, int cStart, double mean, double std){
@@ -401,7 +522,6 @@ public class DTWCaculator {
     public void setBestSoFar(double bestSoFar) {
         this.bestSoFar = bestSoFar;
     }
-
     public double getBestSoFar() {
         return bestSoFar;
     }
@@ -455,15 +575,12 @@ public class DTWCaculator {
     private double distance(double a, double b) {
         return (a - b) * (a - b);
     }
-
     private double min(double a, double b){
         return a < b ? a : b;
     }
-
     private int min(int a, int b) {
         return a < b ? a : b;
     }
-
     private int max(int a, int b) {
         return a > b ? a : b;
     }
