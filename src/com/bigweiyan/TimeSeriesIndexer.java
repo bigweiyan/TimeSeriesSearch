@@ -6,6 +6,8 @@ import com.bigweiyan.strtree.STRTree;
 import com.bigweiyan.strtree.STRTreeHelper;
 import com.bigweiyan.util.BitTool;
 import com.bigweiyan.util.Pair;
+import com.bigweiyan.util.TimeSeriesParser;
+import com.bigweiyan.util.TimeSeriesRawIO;
 
 import java.io.*;
 import java.util.*;
@@ -17,18 +19,21 @@ public class TimeSeriesIndexer {
     public static final int INDEX_FILE_HEAD = 4;
     private int lmbrDim;
     private int treeDegree;
+    public long bufferIOTime = 0;
+    public long myIOTime = 0;
     public TimeSeriesIndexer(int lmbrDim, int treeDegree) {
         this.lmbrDim = lmbrDim;
         this.treeDegree = treeDegree;
     }
 
-    // TODO it's still a in-memory index algorithm; try to make it on disk by making data and envelope on disk
     public void creatIndex(String inputFolder, String indexFolder, float diffThreshold, float usageThreshold,
                            float bandRate, boolean haveLabel, String divider) throws IOException{
         File file = new File(inputFolder);
         for (File dataFile:file.listFiles()) {
             if (dataFile.isFile()) {
                 // input data
+                System.out.println("-----------create index-----------");
+                Date date = new Date();
                 ArrayList<Integer> exceptionIDs = new ArrayList<>();
                 ArrayList<Pair<Integer, LMBR>> lmbrAndIds = new ArrayList<>();
                 ArrayList<String> labels = new ArrayList<>();
@@ -42,6 +47,7 @@ public class TimeSeriesIndexer {
                 LMBRHelper lmbrHelper;
                 int dataSize = 0;
                 // read data, split it into lmbrs and exceptions and then write it back
+
                 if (scanner.hasNext()) {
                     line = scanner.nextLine();
                     if (line.isEmpty()) break;
@@ -53,7 +59,7 @@ public class TimeSeriesIndexer {
                     currentData = reader.readSeries(line);
                     seriesLength = currentData.length;
                     rawWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw", false,
-                            TimeSeriesRawIO.TYPE_PURE_DATA, 1000, seriesLength);
+                            TimeSeriesRawIO.TYPE_PURE_DATA, 1, seriesLength);
                     rawWriter.bufferedWrite(currentData);
                     currentEnvelop = new TimeSeriesEnvelop(currentData, bandRate);
                     lmbrHelper = new LMBRHelper(currentEnvelop.lowerEnvelop.length, lmbrDim);
@@ -80,18 +86,21 @@ public class TimeSeriesIndexer {
                 }
                 scanner.close();
                 System.out.println("exceptions: " + exceptionIDs.size() + ", mbrs: " + lmbrAndIds.size());
+                System.out.println("split time:"+Long.toString(new Date().getTime() - date.getTime()));
+
 
                 // save exceptions
+                date = new Date();
                 TimeSeriesRawIO exceptionsWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".edt",
-                        false, TimeSeriesRawIO.TYPE_EXCEPTION, 1000, seriesLength);
+                        false, TimeSeriesRawIO.TYPE_EXCEPTION, 1, seriesLength);
                 TimeSeriesRawIO rawReader = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw",
-                        true, TimeSeriesRawIO.TYPE_PURE_DATA, 1000);
+                        true, TimeSeriesRawIO.TYPE_PURE_DATA, 1);
                 for (int i = 0; i < exceptionIDs.size(); i++) {
                     int pos = exceptionIDs.get(i);
                     exceptionsWriter.bufferedWriteException(rawReader.bufferedRead(pos), pos);
                 }
-
                 exceptionsWriter.close();
+                System.out.println("exception write time:"+Long.toString(new Date().getTime() - date.getTime()));
 
                 //save classes
                 if (haveLabel) {
@@ -106,10 +115,17 @@ public class TimeSeriesIndexer {
                 }
 
                 // create and save tree
+                date = new Date();
                 STRTreeHelper strTreeHelper = new STRTreeHelper(treeDegree);
                 STRTree tree = strTreeHelper.generateTreeFromMemory(lmbrAndIds);
+                System.out.println("tree generate time:"+Long.toString(new Date().getTime() - date.getTime())
+                        + ", split time:" + strTreeHelper.splitTime + ", sort time:" + strTreeHelper.sortTime
+                        + ", create object time:" + strTreeHelper.objectTime);
+                date = new Date();
                 outputTree(indexFolder, dataFile.getName(), tree, rawReader, dataSize, seriesLength);
                 rawReader.close();
+                System.out.println("index write time:"+Long.toString(new Date().getTime() - date.getTime())
+                        + ", bufferIOTime:" + bufferIOTime + ", myIOTime:" + myIOTime);
             }
         }
     }
@@ -160,10 +176,12 @@ public class TimeSeriesIndexer {
         BitTool.intToBytes(seriesList.size(), intTemp, 0);
         idxStream.write(intTemp);
         TimeSeriesRawIO timeSeriesRawIO = new TimeSeriesRawIO(indexFolder + "/" + indexName + ".odt",
-                false, TimeSeriesRawIO.TYPE_PURE_DATA, 1000, seriesLength);
+                false, TimeSeriesRawIO.TYPE_PURE_DATA, 1, seriesLength);
         for (int i = 0; i < seriesList.size(); i++) {
             outPutLMBR(idxStream, seriesList.get(i),mapStream);
+            Date date = new Date();
             timeSeriesRawIO.bufferedWrite(rawReader.bufferedRead(seriesList.get(i).getKey()));
+            myIOTime += new Date().getTime() - date.getTime();
         }
         timeSeriesRawIO.close();
         idxStream.flush();
@@ -194,7 +212,9 @@ public class TimeSeriesIndexer {
             BitTool.intToBytes(-1, tmp, pos);
             pos += 4;
         }
+        Date date = new Date();
         nodeStream.write(tmp);
+        bufferIOTime += new Date().getTime() - date.getTime();
     }
 
     private void outPutLeafNode(BufferedOutputStream nodeStream, STRTree leafNode,
@@ -219,7 +239,9 @@ public class TimeSeriesIndexer {
             BitTool.intToBytes(-1, tmp, pos);
             pos += 4;
         } // this is degree * 4 bytes
+        Date date = new Date();
         nodeStream.write(tmp);
+        bufferIOTime += new Date().getTime() - date.getTime();
     }
 
     private void outPutLMBR(BufferedOutputStream lmbrStream, Pair<Integer, LMBR> series, BufferedOutputStream mapStream) throws IOException{
@@ -232,10 +254,12 @@ public class TimeSeriesIndexer {
             BitTool.intToBytes(series.getValue().weights[i], tmp, pos + 16);
             pos += 20;
         }
+        Date date = new Date();
         lmbrStream.write(tmp);
         byte intTmp[] = new byte[4];
         BitTool.intToBytes(series.getKey(), intTmp, 0);
         mapStream.write(intTmp);
+        bufferIOTime += new Date().getTime() - date.getTime();
     }
 
     public void printIndex(String indexFolder, String indexName) throws IOException{

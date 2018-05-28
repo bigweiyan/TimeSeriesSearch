@@ -1,6 +1,4 @@
-package com.bigweiyan;
-
-import com.bigweiyan.util.BitTool;
+package com.bigweiyan.util;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;

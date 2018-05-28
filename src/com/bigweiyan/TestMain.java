@@ -4,21 +4,20 @@ import com.bigweiyan.strtree.LMBR;
 import com.bigweiyan.strtree.LMBRHelper;
 import com.bigweiyan.strtree.STRTree;
 import com.bigweiyan.strtree.STRTreeHelper;
+import com.bigweiyan.util.MappedTimeSeriesLoader;
 import com.bigweiyan.util.Pair;
+import com.bigweiyan.util.TimeSeriesParser;
+import com.bigweiyan.util.TimeSeriesRawIO;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.*;
 
 public class TestMain {
-    public static void main(String[] args){
-        try {
-            testIndex();
-            testQueryTree();
-            testQuery();
-        }catch (IOException e) {
-            e.printStackTrace();
-        }
+    public static void main(String[] args) throws IOException{
+        testIndex();
+        testQueryTree("Data50000");
+        testQuery("Data50000");
 
     }
 
@@ -48,7 +47,7 @@ public class TestMain {
 
     }
 
-    public static void testQuery(){
+    public static void testQuery(String fileName){
         TimeSeriesParser reader = new TimeSeriesParser(" ");
         TimeSeries query = null;
         double[] cand = null;
@@ -61,7 +60,8 @@ public class TestMain {
             fileInputStream.close();
             query.initAsQuery(false);
             DTWCalculator caculator = new DTWCalculator(query.getLength(), query.bandWidth);
-            TimeSeriesRawIO timeSeriesReader = new TimeSeriesRawIO("D:/index/Data00000.raw", true, TimeSeriesRawIO.TYPE_PURE_DATA, 1000);
+            TimeSeriesRawIO timeSeriesReader = new TimeSeriesRawIO("D:/index/" + fileName + ".raw", true,
+                    TimeSeriesRawIO.TYPE_PURE_DATA, 1);
             int totalSeries = timeSeriesReader.getTotalSeries();
             int result = -1;
             TimeSeries candidate;
@@ -81,7 +81,8 @@ public class TestMain {
         }
     }
 
-    public static void testQueryTree() throws IOException{
+    public static void testQueryTree(String fileName) throws IOException{
+        System.out.println("----------read index----------");
         Date start = new Date();
         STRTreeHelper helper = new STRTreeHelper(40);
         TimeSeriesParser reader = new TimeSeriesParser(" ");
@@ -94,14 +95,15 @@ public class TestMain {
             scanner.close();
             fileInputStream.close();
             query.initAsQuery(false);
-            tree = helper.generateTreeFromFile("D:/index","Data00000");
+            tree = helper.generateTreeFromFile("D:/index",fileName);
         }catch (IOException e) {
             e.printStackTrace();
         }
         System.out.println("index io time:" + Long.toString(new Date().getTime() - start.getTime()));
+        System.out.println("----------query----------");
         Date date = new Date();
         DTWCalculator calculator = new DTWCalculator(query.getLength(), query.bandWidth);
-        TimeSeriesRawIO io = new TimeSeriesRawIO("D:/index/Data00000.edt", true, TimeSeriesRawIO.TYPE_EXCEPTION, 1000);
+        TimeSeriesRawIO io = new TimeSeriesRawIO("D:/index/" + fileName +".edt", true, TimeSeriesRawIO.TYPE_EXCEPTION, 1);
         int result = 0;
         for (int i = 0; i < io.getTotalSeries(); i++) {
             Pair<double[], Integer> pair = io.bufferedReadException(i);
@@ -112,7 +114,7 @@ public class TestMain {
             }
         }
         System.out.println("exp search time:" + Long.toString(new Date().getTime() - date.getTime()));
-        MappedTimeSeriesLoader loader = new MappedTimeSeriesLoader("D:/index/Data00000");
+        MappedTimeSeriesLoader loader = new MappedTimeSeriesLoader("D:/index/" + fileName);
         Date searchTime = new Date();
         int result2 = calculator.treeSearch(query, tree, loader);
         loader.close();
@@ -124,36 +126,6 @@ public class TestMain {
         }
 
     }
-
-//    public static void testIO() throws IOException{
-//        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10,40);
-//        try {
-//            indexer.printIndex("D:/index", "Data00000");
-//        }catch (IOException e) {
-//            e.printStackTrace();
-//        }
-//        TimeSeriesRawIO timeSeriesRawReader = new TimeSeriesRawIO("D:/index/Data00000.edt", true, TimeSeriesRawIO.TYPE_EXCEPTION, 100);
-//        Pair<double[][], Integer[]> pairs = timeSeriesRawReader.readExceptions();
-//        for (int i = 0; i < pairs.getValue().length; i++) {
-//            System.out.println("key: " + pairs.getValue()[i]);
-//            for (int j = 0; j < pairs.getKey()[0].length; j++) {
-//                System.out.print(pairs.getKey()[i][j] + " ");
-//            }
-//            System.out.println("\n");
-//        }
-//        timeSeriesRawReader.close();
-//        timeSeriesRawReader = new TimeSeriesRawIO("D:/index/Data00000.odt", true, TimeSeriesRawIO.TYPE_PURE_DATA, 100);
-//        double[][] orderedData = timeSeriesRawReader.readAll();
-//        timeSeriesRawReader.close();
-//        for (int i = 0; i < orderedData.length; i++) {
-//            System.out.println(i);
-//            for (int j = 0; j < orderedData[0].length; j++) {
-//                System.out.print(orderedData[i][j] + " ");
-//            }
-//            System.out.println("\n");
-//        }
-//    }
-
 
     private static void testManyQuery() {
         final int TRAIN_SIZE = 1000;
@@ -224,10 +196,8 @@ public class TestMain {
     }
 
     public static void testIndex() throws IOException{
-        Date date = new Date();
-        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10, 40);
-        indexer.creatIndex("D:/test", "D:/index", 4.0f,
-                0.03f, 0.1f, false, " ");
-        System.out.println("index time:" + Long.toString(new Date().getTime() - date.getTime()));
+        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10, 80);
+        indexer.creatIndex("D:/test", "D:/index", 4.2f,
+                0.02f, 0.1f, false, " ");
     }
 }
