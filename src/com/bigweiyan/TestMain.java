@@ -197,7 +197,7 @@ public class TestMain {
 
     public static void testIndex() throws IOException{
         TimeSeriesIndexer indexer = new TimeSeriesIndexer(10, 80);
-        indexer.creatIndex("D:/test", "D:/index", 4.2f,
+        indexer.creatIndex("D:/output","L256S500K", "D:/index", 4.2f,
                 0.02f, 0.1f, false, " ");
     }
 }

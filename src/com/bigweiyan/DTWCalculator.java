@@ -6,7 +6,9 @@ import com.bigweiyan.util.MappedTimeSeriesLoader;
 import com.bigweiyan.util.Pair;
 
 import java.io.IOException;
+import java.util.LinkedList;
 import java.util.PriorityQueue;
+import java.util.Queue;
 
 public class DTWCalculator {
     private int queryLen;
@@ -308,8 +310,9 @@ public class DTWCalculator {
         }
         startPos[0] = 0;
         startPos[segment] = length;
-        PriorityQueue<Pair<Object,Double>> candidates = new PriorityQueue<>((Pair<Object, Double> o1, Pair<Object, Double> o2) ->
-                        o1.getValue() - o2.getValue() > 0 ? -1 : (o1.getValue() - o2.getValue() < 0 ? 1 : 0));
+//        PriorityQueue<Pair<Object,Double>> candidates = new PriorityQueue<>((Pair<Object, Double> o1, Pair<Object, Double> o2) ->
+//                        o1.getValue() - o2.getValue() > 0 ? -1 : (o1.getValue() - o2.getValue() < 0 ? 1 : 0));
+        Queue<Pair<Object, Double>> candidates = new LinkedList<>();
         candidates.offer(new Pair<>(tree, 0.0));
         while (!candidates.isEmpty()) {
             if (candidates.peek().getKey().getClass() == STRTree.class) {
