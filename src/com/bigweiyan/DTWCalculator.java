@@ -6,9 +6,10 @@ import com.bigweiyan.util.MappedTimeSeriesLoader;
 import com.bigweiyan.util.Pair;
 
 import java.io.IOException;
+import java.util.Deque;
 import java.util.LinkedList;
-import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.Stack;
 
 public class DTWCalculator {
     private int queryLen;
@@ -17,6 +18,8 @@ public class DTWCalculator {
     private int keogh1Count;
     private int keogh2Count;
     private int dtwCount;
+    public int nodeCount;
+    public int leafCount;
     private double keogh1Bound[];
     private double keogh2Bound[];
     private double choosedBound[];
@@ -29,6 +32,8 @@ public class DTWCalculator {
         keogh2Bound = new double[queryLen];
         choosedBound = new double[queryLen];
         bestSoFar = Double.MAX_VALUE;
+        leafCount = 0;
+        nodeCount = 0;
     }
 
     /**
@@ -310,12 +315,11 @@ public class DTWCalculator {
         }
         startPos[0] = 0;
         startPos[segment] = length;
-//        PriorityQueue<Pair<Object,Double>> candidates = new PriorityQueue<>((Pair<Object, Double> o1, Pair<Object, Double> o2) ->
-//                        o1.getValue() - o2.getValue() > 0 ? -1 : (o1.getValue() - o2.getValue() < 0 ? 1 : 0));
         Queue<Pair<Object, Double>> candidates = new LinkedList<>();
         candidates.offer(new Pair<>(tree, 0.0));
         while (!candidates.isEmpty()) {
             if (candidates.peek().getKey().getClass() == STRTree.class) {
+                nodeCount++;
                 Pair<Object, Double> pair = candidates.poll();
                 STRTree treeCand = (STRTree) pair.getKey();
                 double lowerBound = pair.getValue();
@@ -326,8 +330,8 @@ public class DTWCalculator {
                             int start;
                             lowerBound = 0;
                             for (int j = 0; j < segment; j++) {
+                                start = startPos[j];
                                 for (int k = 0; k < treeLmbr.weights[j]; k++) {
-                                    start = startPos[j];
                                     if (query.data[start + k] < treeLmbr.lower[j]){
                                         lowerBound += distance(query.data[start + k], treeLmbr.lower[j]);
                                     }else if (query.data[start + k] > treeLmbr.upper[j]) {
@@ -345,8 +349,8 @@ public class DTWCalculator {
                             int start;
                             lowerBound = 0;
                             for (int j = 0; j < segment; j++) {
+                                start = startPos[j];
                                 for (int k = 0; k < treeLmbr.weights[j]; k++) {
-                                    start = startPos[j];
                                     if (query.data[start + k] < treeLmbr.lower[j]){
                                         lowerBound += distance(query.data[start + k], treeLmbr.lower[j]);
                                     }else if (query.data[start + k] > treeLmbr.upper[j]) {
@@ -361,6 +365,104 @@ public class DTWCalculator {
                     }
                 }
             }else if (candidates.peek().getKey().getClass() == Pair.class) {
+                leafCount++;
+                Pair<Object, Double> pair = candidates.poll();
+                Pair<Integer, LMBR> lmbrPair = (Pair<Integer, LMBR>) pair.getKey();
+                double lowerBound = pair.getValue();
+                if (lowerBound < bestSoFar) {
+                    int key = lmbrPair.getKey();
+                    TimeSeries timeSeries = new TimeSeries(loader.getTSFromKey(key), width);
+                    timeSeries.initAsCand(false);
+                    boolean isBetter = matchQueryWithNormedSeries(query, timeSeries);
+                    if (isBetter) result = key;
+                }
+            }
+        }
+        return result;
+    }
+
+    public int shiftTreeSearch(TimeSeries query, STRTree tree, int shift, MappedTimeSeriesLoader loader) throws IOException {
+        if (tree == null)
+            return -1;
+        int result = -1;
+        // calculate lmbr related
+        int segment = tree.lmbr.upper.length;
+        int length = queryLen;
+        int startPos[] = new int[segment + 1];
+        for (int i = 1; i < segment; i++) {
+            startPos[i] = (int)(length * 1.0 * i / segment) + shift;
+        }
+        startPos[0] = shift;
+        startPos[segment] = length + shift;
+        Queue<Pair<Object, Double>> candidates = new LinkedList<>();
+        candidates.offer(new Pair<>(tree, 0.0));
+        while (!candidates.isEmpty()) {
+            if (candidates.peek().getKey().getClass() == STRTree.class) {
+                nodeCount++;
+                Pair<Object, Double> pair = candidates.poll();
+                STRTree treeCand = (STRTree) pair.getKey();
+                double lowerBound = pair.getValue();
+                if (lowerBound < bestSoFar) {
+                    if (treeCand.isLeaf){
+                        for (int i = 0; i < treeCand.series.length; i++) {
+                            LMBR treeLmbr = treeCand.series[i].getValue();
+                            int start;
+                            lowerBound = 0;
+                            for (int j = 0; j < segment - 1; j++) {
+                                start = startPos[j];
+                                for (int k = 0; k < treeLmbr.weights[j]; k++) {
+                                    if (query.data[start + k] < treeLmbr.lower[j]){
+                                        lowerBound += distance(query.data[start + k], treeLmbr.lower[j]);
+                                    }else if (query.data[start + k] > treeLmbr.upper[j]) {
+                                        lowerBound += distance(query.data[start + k], treeLmbr.upper[j]);
+                                    }
+                                }
+                                if (lowerBound > bestSoFar) break;
+                            }
+                            start = startPos[segment - 1];
+                            for (int k = 0; k < treeLmbr.weights[segment - 1]; k++) {
+                                int currentPos = (start + k) % queryLen;
+                                if (query.data[currentPos] < treeLmbr.lower[segment - 1]){
+                                    lowerBound += distance(query.data[currentPos], treeLmbr.lower[segment - 1]);
+                                }else if (query.data[currentPos] > treeLmbr.upper[segment - 1]) {
+                                    lowerBound += distance(query.data[currentPos], treeLmbr.upper[segment - 1]);
+                                }
+                            }
+                            if (lowerBound < bestSoFar)
+                                candidates.offer(new Pair<>(treeCand.series[i], lowerBound));
+                        }
+                    }else {
+                        for (int i = 0; i < treeCand.children.length; i++) {
+                            LMBR treeLmbr = treeCand.children[i].lmbr;
+                            int start;
+                            lowerBound = 0;
+                            for (int j = 0; j < segment; j++) {
+                                start = startPos[j];
+                                for (int k = 0; k < treeLmbr.weights[j]; k++) {
+                                    if (query.data[start + k] < treeLmbr.lower[j]){
+                                        lowerBound += distance(query.data[start + k], treeLmbr.lower[j]);
+                                    }else if (query.data[start + k] > treeLmbr.upper[j]) {
+                                        lowerBound += distance(query.data[start + k], treeLmbr.upper[j]);
+                                    }
+                                }
+                                if (lowerBound > bestSoFar) break;
+                            }
+                            start = startPos[segment - 1];
+                            for (int k = 0; k < treeLmbr.weights[segment - 1]; k++) {
+                                int currentPos = (start + k) % queryLen;
+                                if (query.data[currentPos] < treeLmbr.lower[segment - 1]){
+                                    lowerBound += distance(query.data[currentPos], treeLmbr.lower[segment - 1]);
+                                }else if (query.data[currentPos] > treeLmbr.upper[segment - 1]) {
+                                    lowerBound += distance(query.data[currentPos], treeLmbr.upper[segment - 1]);
+                                }
+                            }
+                            if (lowerBound < bestSoFar)
+                                candidates.offer(new Pair<>(treeCand.children[i], lowerBound));
+                        }
+                    }
+                }
+            }else if (candidates.peek().getKey().getClass() == Pair.class) {
+                leafCount++;
                 Pair<Object, Double> pair = candidates.poll();
                 Pair<Integer, LMBR> lmbrPair = (Pair<Integer, LMBR>) pair.getKey();
                 double lowerBound = pair.getValue();

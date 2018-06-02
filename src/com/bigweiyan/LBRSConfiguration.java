@@ -7,6 +7,16 @@ public class LBRSConfiguration {
     private String devider = " ";
     private int lmbrDim = 8;
     private int treeDegree = 40;
+    private boolean hasLable = false;
+    private int shiftNum = 1;
+
+    public int getShiftNum() {
+        return shiftNum;
+    }
+
+    public void setShiftNum(int shiftNum) {
+        this.shiftNum = shiftNum;
+    }
 
     public boolean isHasLable() {
         return hasLable;
@@ -16,7 +26,6 @@ public class LBRSConfiguration {
         this.hasLable = hasLable;
     }
 
-    private boolean hasLable = false;
     public float getDiffThreshold() {
         return diffThreshold;
     }

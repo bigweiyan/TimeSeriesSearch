@@ -9,7 +9,9 @@ import com.bigweiyan.util.TimeSeriesRawIO;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Scanner;
 
 public class Starter {
@@ -24,14 +26,17 @@ public class Starter {
         this.inputFolder = inputFolder;
     }
 
-    public void LBRSSearch(String queryFileName) throws IOException{
+    public void LBRSSearch(String queryFileName, boolean hasLable) throws IOException{
+        int shiftNum = configuration.getShiftNum();
         System.out.println("----------read index----------");
         Date start = new Date();
         STRTreeHelper helper = new STRTreeHelper(configuration.getTreeDegree());
         TimeSeriesParser reader = new TimeSeriesParser(configuration.getDevider());
         TimeSeries query = null;
-        STRTree tree = null;
-        tree = helper.generateTreeFromFile(indexFolder,dataName);
+        List<STRTree> trees = new ArrayList<>(shiftNum);
+        for (int i = 0; i < shiftNum; i++) {
+            trees.add(helper.generateTreeFromFile(indexFolder, dataName + "." + i));
+        }
         System.out.println("index io time:" + Long.toString(new Date().getTime() - start.getTime()));
         System.out.println("----------query-lmrs----------");
         FileInputStream fileInputStream = new FileInputStream(queryFileName);
@@ -40,10 +45,18 @@ public class Starter {
         long treeSearchTime = 0;
         DTWCalculator calculator = null;
         TimeSeriesRawIO io = new TimeSeriesRawIO(indexFolder + "/" + dataName + ".edt", true, TimeSeriesRawIO.TYPE_EXCEPTION, 1);
-        MappedTimeSeriesLoader loader = new MappedTimeSeriesLoader(indexFolder + "/" + dataName);
+
+        List<MappedTimeSeriesLoader> loaders = new ArrayList<>(shiftNum);
+        for (int i = 0; i < shiftNum; i++) {
+            loaders.add(new MappedTimeSeriesLoader(indexFolder + "/" + dataName + "." + i));
+        }
         while (scanner.hasNext()) {
             Date date = new Date();
-            query = new TimeSeries(reader.readSeriesAndNormalize(scanner.nextLine()), configuration.getBandRate());
+            String queryLine = scanner.nextLine();
+            if (hasLable) {
+                queryLine = queryLine.split(configuration.getDevider(),2)[1];
+            }
+            query = new TimeSeries(reader.readSeriesAndNormalize(queryLine), configuration.getBandRate());
             query.initAsQuery(false);
             if (calculator == null) calculator = new DTWCalculator(query.getLength(), query.bandWidth);
             calculator.reset();
@@ -58,22 +71,34 @@ public class Starter {
             }
             expSearchTime += new Date().getTime() - date.getTime();
             Date searchTime = new Date();
-            int result2 = calculator.treeSearch(query, tree, loader);
-            if (result2 != -1) {
-                System.out.println("result(tree):" + result2);
+            int treeNum = 0;
+            int treeResult = -1;
+            int minSegmentLen = query.getLength() / configuration.getLmbrDim();
+            for (int i = 0; i < shiftNum; i++) {
+                int tmp = calculator.shiftTreeSearch(query, trees.get(i), (int)(minSegmentLen * 1.0 * i / shiftNum), loaders.get(i));
+                if (tmp != -1) {
+                    treeResult = tmp;
+                    treeNum = i;
+                }
+            }
+            if (treeResult != -1) {
+                System.out.println("result(tree " + treeNum + "):" + treeResult);
             } else {
                 System.out.println("result(exp):" + result);
             }
             treeSearchTime += new Date().getTime() - searchTime.getTime();
         }
         io.close();
-        loader.close();
+        for (MappedTimeSeriesLoader loader:loaders) {
+            loader.close();
+        }
         System.out.println("exp time:" + expSearchTime + "ms, tree time:" + treeSearchTime+ "ms, total time:" + (treeSearchTime + expSearchTime));
+        System.out.println("dtw count:"+calculator.leafCount + ", lb_lmbr count:" + calculator.nodeCount);
         scanner.close();
         fileInputStream.close();
     }
 
-    public void trillionSearch(String queryFileName) {
+    public void trillionSearch(String queryFileName, boolean hasLable) {
         System.out.println("----------query-trillion----------");
         TimeSeriesParser reader = new TimeSeriesParser(configuration.getDevider());
         TimeSeries query = null;
@@ -84,7 +109,11 @@ public class Starter {
             Date date = new Date();
             DTWCalculator calculator = null;
             while (scanner.hasNext()) {
-                query = new TimeSeries(reader.readSeriesAndNormalize(scanner.nextLine()), configuration.getBandRate());
+                String queryLine = scanner.nextLine();
+                if (hasLable) {
+                    queryLine = queryLine.split(configuration.getDevider(),2)[1];
+                }
+                query = new TimeSeries(reader.readSeriesAndNormalize(queryLine), configuration.getBandRate());
                 query.initAsQuery(false);
                 if (calculator == null) calculator = new DTWCalculator(query.getLength(), query.bandWidth);
                 calculator.reset();
@@ -114,7 +143,6 @@ public class Starter {
 
     public void index()throws IOException {
         TimeSeriesIndexer indexer = new TimeSeriesIndexer(configuration.getLmbrDim(), configuration.getTreeDegree());
-        indexer.creatIndex(inputFolder,dataName, indexFolder, configuration.getDiffThreshold(),
-                configuration.getUsageThreshold(), configuration.getBandRate(), configuration.isHasLable(), configuration.getDevider());
+        indexer.creatIndex(inputFolder,dataName, indexFolder, configuration);
     }
 }

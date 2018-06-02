@@ -11,6 +11,7 @@ public class LMBRHelper {
      * store (segment + 1) element so we can access last element to get length of raw
      */
     private int startPos[] = null;
+    private int shiftArray[] = null;
     /**
      * for each dimension pair, the difference of the pair should less than this threshold so we can get reasonable lower
      * bound<br/>
@@ -113,5 +114,99 @@ public class LMBRHelper {
         result.upper = upper;
         result.weights = weight;
         lmbrOutput.add(new Pair<>(idInput, result));
+    }
+
+    public void testManyLMBR(TimeSeriesEnvelop envelopInput, int idInput, List<List<Pair<Integer, LMBR>>> lmbrOutput,
+                         List<Integer> exceptionOutput) {
+        if (envelopInput.upperEnvelop.length != startPos[segment]) {
+            throw new IllegalArgumentException("You should use the same length series as your LMBRHelper's");
+        }
+        if (shiftArray == null) {
+            int shiftCount = lmbrOutput.size();
+            int minSegmentLen = startPos[segment] / segment;
+            if (shiftCount >= minSegmentLen) {
+                throw new IllegalArgumentException("there's to many shifts");
+            }
+            shiftArray = new int[shiftCount];
+            for (int i = 0; i < shiftCount; i++) {
+                shiftArray[i] = (int)(minSegmentLen * 1.0 * i / shiftCount);
+            }
+        }
+
+        LMBR bestLMBR = null;
+        int bestResult = 0;
+        int bestNo = 0;
+        for (int i = 0; i < shiftArray.length; i++) {
+            LMBR lmbr = new LMBR();
+            int tmp = testLMBRWithShift(envelopInput, shiftArray[i], lmbr, bestResult);
+            if (tmp > bestResult) {
+                bestResult = tmp;
+                bestLMBR = lmbr;
+                bestNo = i;
+            }
+        }
+        if (bestResult == 0) {
+            exceptionOutput.add(idInput);
+        }else {
+            lmbrOutput.get(bestNo).add(new Pair<>(idInput, bestLMBR));
+        }
+    }
+
+    private int testLMBRWithShift(TimeSeriesEnvelop envelop, int shift, LMBR lmbrOutput, int bestSoFar) {
+        double upper[] = new double[segment];
+        double lower[] = new double[segment];
+        int weight[] = new int[segment];
+        double tmpMax, tmpMin;
+        int shiftPos[] = new int[segment + 1];
+        for (int i = 0; i < segment + 1; i++) {
+            shiftPos[i] = startPos[i] + shift;
+        }
+        int result = 0;
+        for (int i = 0; i < segment - 1; i++) {
+            tmpMax = - Double.MAX_VALUE;
+            tmpMin = Double.MAX_VALUE;
+            int usageTh = (int)(usageThreshold * (shiftPos[i + 1] - shiftPos[i]));
+            for (int j = shiftPos[i]; j < shiftPos[i + 1]; j++) {
+                if (tmpMax < envelop.upperEnvelop[j]) tmpMax = envelop.upperEnvelop[j];
+                if (tmpMin > envelop.lowerEnvelop[j]) tmpMin = envelop.lowerEnvelop[j];
+                if (tmpMax - tmpMin > diffThreshold) {
+                    if (j - shiftPos[i] < usageTh) {
+                        return 0;
+                    }else {
+                        break;
+                    }
+                }
+                upper[i] = tmpMax;
+                lower[i] = tmpMin;
+                weight[i] = j - shiftPos[i] + 1;
+            }
+            result += weight[i];
+            if (bestSoFar - result > shiftPos[segment + 1] - shiftPos[i + 1]) {
+                return 0;
+            }
+        }
+        int length = startPos[segment];
+        tmpMax = - Double.MAX_VALUE;
+        tmpMin = Double.MAX_VALUE;
+        int usageTh = (int)(usageThreshold * (shiftPos[segment] - shiftPos[segment - 1]));
+        for (int j = shiftPos[segment - 1]; j < shiftPos[segment]; j++) {
+            if (tmpMax < envelop.upperEnvelop[j % length]) tmpMax = envelop.upperEnvelop[j % length];
+            if (tmpMin > envelop.lowerEnvelop[j % length]) tmpMin = envelop.lowerEnvelop[j % length];
+            if (tmpMax - tmpMin > diffThreshold) {
+                if (j - shiftPos[segment - 1] < usageTh) {
+                    return 0;
+                }else {
+                    break;
+                }
+            }
+            upper[segment - 1] = tmpMax;
+            lower[segment - 1] = tmpMin;
+            weight[segment - 1] = j - shiftPos[segment - 1] + 1;
+        }
+        result += weight[segment - 1];
+        lmbrOutput.upper = upper;
+        lmbrOutput.lower = lower;
+        lmbrOutput.weights = weight;
+        return result;
     }
 }
