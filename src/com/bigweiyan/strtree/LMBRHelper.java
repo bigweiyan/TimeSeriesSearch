@@ -138,7 +138,7 @@ public class LMBRHelper {
         int bestNo = 0;
         for (int i = 0; i < shiftArray.length; i++) {
             LMBR lmbr = new LMBR();
-            int tmp = testLMBRWithShift(envelopInput, shiftArray[i], lmbr, bestResult);
+            int tmp = testLMBRWithShift(envelopInput, shiftArray[i], lmbr);
             if (tmp > bestResult) {
                 bestResult = tmp;
                 bestLMBR = lmbr;
@@ -152,7 +152,7 @@ public class LMBRHelper {
         }
     }
 
-    private int testLMBRWithShift(TimeSeriesEnvelop envelop, int shift, LMBR lmbrOutput, int bestSoFar) {
+    private int testLMBRWithShift(TimeSeriesEnvelop envelop, int shift, LMBR lmbrOutput) {
         double upper[] = new double[segment];
         double lower[] = new double[segment];
         int weight[] = new int[segment];
@@ -181,9 +181,6 @@ public class LMBRHelper {
                 weight[i] = j - shiftPos[i] + 1;
             }
             result += weight[i];
-            if (bestSoFar - result > shiftPos[segment] - shiftPos[i + 1]) {
-                return 0;
-            }
         }
         int length = startPos[segment];
         tmpMax = - Double.MAX_VALUE;

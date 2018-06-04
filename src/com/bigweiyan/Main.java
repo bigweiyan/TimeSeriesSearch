@@ -15,7 +15,7 @@ public class Main {
         configuration.setShiftNum(2);
         Starter starter = new Starter(configuration, "D:/output1000", "Data50000","D:/index");
         starter.index();
-        starter.LBRSSearch("D:/query/query1000.txt", false);
+        //starter.LBRSSearch("D:/query/query1000.txt", false);
         //starter.trillionSearch("D:/query/query1000.txt", false);
     }
 }
