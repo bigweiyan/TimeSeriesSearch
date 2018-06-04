@@ -1,4 +1,4 @@
-package com.bigweiyan;
+package com.bigweiyan.util;
 
 import java.util.ArrayList;
 import java.util.Scanner;

@@ -5,8 +5,8 @@ import com.bigweiyan.util.Pair;
 import com.sun.istack.internal.NotNull;
 
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.Date;
 
 public class STRTreeHelper {
     /**
@@ -14,9 +14,9 @@ public class STRTreeHelper {
      */
     private int degree;
     private int dim;
-    private int treCellLength;
-    private int idxCellLength;
-
+    public long sortTime = 0;
+    public long objectTime = 0;
+    public long splitTime = 0;
     public STRTreeHelper(int degree) {
         this.degree = degree;
     }
@@ -37,15 +37,13 @@ public class STRTreeHelper {
     }
 
     public STRTree generateTreeFromFile(String indexFolder, String indexName) throws IOException {
-        RandomAccessFile treFile = new RandomAccessFile(indexFolder + "/" + indexName + ".tre", "r");
-        RandomAccessFile idxFile = new RandomAccessFile(indexFolder + "/" + indexName + ".idx", "r");
-        dim = treFile.readInt();
-        degree = treFile.readInt();
-        treCellLength = 1 + 20 * dim + 4 * degree;
-        idxCellLength = 4 + 20 * dim;
-        STRTree node = createTreeFromLine(0, treFile, idxFile);
-        treFile.close();
-        idxFile.close();
+        BufferTreReader treReader = new BufferTreReader(indexFolder + "/" + indexName , 50);
+        dim = treReader.getLmbrDim();
+        degree = treReader.getDegree();
+        BufferIdxReader idxReader = new BufferIdxReader(indexFolder + "/" + indexName , dim, 100);
+        STRTree node = createTreeFromLine(0, treReader, idxReader);
+        treReader.close();
+        idxReader.close();
         return node;
     }
 
@@ -53,18 +51,22 @@ public class STRTreeHelper {
         STRTree node = null;
         int mbrDim = mbrWithIds.get(0).getValue().upper.length;
         if (mbrWithIds.size() <= degree || currentDim == mbrDim - 1) {
+            Date date = new Date();
             ArrayList<STRTree> trees = createLeafSegment(mbrWithIds, mbrDim);
             if (trees.size() == 1) {
                 node = trees.get(0);
             }else {
                 node = createTreeSegment(trees, mbrDim);
             }
+            objectTime += new Date().getTime() - date.getTime();
         } else {
+            Date date = new Date();
             mbrWithIds.sort((Pair<Integer, LMBR> a, Pair<Integer, LMBR> b) ->{
                 if (a.getValue().center[currentDim] > b.getValue().center[currentDim]) return 1;
                 else if(a.getValue().center[currentDim] < b.getValue().center[currentDim]) return -1;
                 else return 0;
             });
+            sortTime += new Date().getTime() - date.getTime();
             // the number of untreated dimension
             int leftDim = mbrDim - currentDim;
             // the pages will split to many parts and each part will form a tree node
@@ -73,6 +75,7 @@ public class STRTreeHelper {
             int partLen = (int)Math.ceil(Math.pow(usePages, (leftDim - 1.0) / leftDim));
             // create parameter for next recursion
             int currentPart =  -1;
+            date = new Date();
             ArrayList<ArrayList<Pair<Integer, LMBR>>> paras = new ArrayList<>(degree);
             ArrayList<Pair<Integer, LMBR>> currentPara = null;
             for (int i = 0; i < mbrWithIds.size(); i++) {
@@ -83,11 +86,14 @@ public class STRTreeHelper {
                 }
                 paras.get(currentPart).add(mbrWithIds.get(i));
             }
+            splitTime += new Date().getTime() - date.getTime();
             ArrayList<STRTree> nodes = new ArrayList<>();
             for (ArrayList<Pair<Integer, LMBR>> para : paras) {
                 nodes.add(recursiveGenerateFromMemory(para, currentDim + 1, partLen));
             }
+            date = new Date();
             node = createTreeSegment(nodes, mbrDim);
+            objectTime += new Date().getTime() - date.getTime();
         }
         return node;
     }
@@ -220,11 +226,11 @@ public class STRTreeHelper {
         return node;
     }
 
-    private STRTree createTreeFromLine(int lineNo, @NotNull RandomAccessFile treFile, @NotNull RandomAccessFile idxFile)
+    private STRTree createTreeFromLine(int lineNo, @NotNull BufferTreReader treReader, @NotNull BufferIdxReader idxReader)
             throws IOException{
         STRTree node = new STRTree();
-        treFile.seek(lineNo * treCellLength + TimeSeriesIndexer.TREE_FILE_HEAD);
-        byte type = treFile.readByte();
+        treReader.seek(lineNo);
+        byte type = treReader.readByte();
         if (type == TimeSeriesIndexer.TYPE_LEAF_NODE) {
             node.isLeaf = true;
         }else {
@@ -234,9 +240,9 @@ public class STRTreeHelper {
         double lower[] = new double[dim];
         int weight[] = new int[dim];
         for (int i = 0; i < dim; i++) {
-            upper[i] = treFile.readDouble();
-            lower[i] = treFile.readDouble();
-            weight[i] = treFile.readInt();
+            upper[i] = treReader.readDouble();
+            lower[i] = treReader.readDouble();
+            weight[i] = treReader.readInt();
         }
         LMBR lmbr = new LMBR();
         lmbr.upper = upper;
@@ -247,22 +253,22 @@ public class STRTreeHelper {
             int[] lmbrPtr = new int[degree];
             int len = 0;
             for (int i = 0; i < degree; i++) {
-                lmbrPtr[i] = treFile.readInt();
+                lmbrPtr[i] = treReader.readInt();
                 if (lmbrPtr[i] == -1) break;
                 len ++;
             }
             Pair<Integer, LMBR> series[] = new Pair[len];
             for (int i = 0; i < len; i++) {
                 lmbr = new LMBR();
-                idxFile.seek(lmbrPtr[i] * idxCellLength + TimeSeriesIndexer.INDEX_FILE_HEAD);
-                int id = idxFile.readInt();
+                idxReader.seek(lmbrPtr[i]);
+                int id = idxReader.readInt();
                 upper = new double[dim];
                 lower = new double[dim];
                 weight = new int[dim];
                 for (int j = 0; j < dim; j++) {
-                    upper[j] = idxFile.readDouble();
-                    lower[j] = idxFile.readDouble();
-                    weight[j] = idxFile.readInt();
+                    upper[j] = idxReader.readDouble();
+                    lower[j] = idxReader.readDouble();
+                    weight[j] = idxReader.readInt();
                 }
                 lmbr.upper = upper;
                 lmbr.lower = lower;
@@ -274,13 +280,13 @@ public class STRTreeHelper {
             int trePtr[] = new int[degree];
             int len = 0;
             for (int i = 0; i < degree; i++) {
-                trePtr[i] = treFile.readInt();
+                trePtr[i] = treReader.readInt();
                 if (trePtr[i] == -1) break;
                 len ++;
             }
             STRTree[] children = new STRTree[len];
             for (int i = 0; i < len; i++) {
-                children[i] = createTreeFromLine(trePtr[i], treFile, idxFile);
+                children[i] = createTreeFromLine(trePtr[i], treReader, idxReader);
             }
             node.children = children;
         }
