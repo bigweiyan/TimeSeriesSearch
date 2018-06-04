@@ -181,7 +181,7 @@ public class LMBRHelper {
                 weight[i] = j - shiftPos[i] + 1;
             }
             result += weight[i];
-            if (bestSoFar - result > shiftPos[segment + 1] - shiftPos[i + 1]) {
+            if (bestSoFar - result > shiftPos[segment] - shiftPos[i + 1]) {
                 return 0;
             }
         }
