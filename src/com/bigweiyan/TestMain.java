@@ -15,9 +15,9 @@ import java.util.*;
 
 public class TestMain {
     public static void main(String[] args) throws IOException{
-        testIndex();
-        testQueryTree("Data50000");
-        testQuery("Data50000");
+//        testIndex();
+//        testQueryTree("Data50000");
+//        testQuery("Data50000");
 
     }
 
@@ -195,9 +195,9 @@ public class TestMain {
         System.out.println(wrongCount * 1.0 / TEST_SIZE);
     }
 
-    public static void testIndex() throws IOException{
-        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10, 80);
-        indexer.creatIndex("D:/test", "D:/index", 4.2f,
-                0.02f, 0.1f, false, " ");
-    }
+//    public static void testIndex() throws IOException{
+//        TimeSeriesIndexer indexer = new TimeSeriesIndexer(10, 80);
+//        indexer.creatIndex("D:/output","L256S500K", "D:/index", 4.2f,
+//                0.02f, 0.1f, false, " ");
+//    }
 }

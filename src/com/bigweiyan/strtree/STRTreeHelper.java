@@ -7,6 +7,7 @@ import com.sun.istack.internal.NotNull;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 public class STRTreeHelper {
     /**
@@ -21,7 +22,7 @@ public class STRTreeHelper {
         this.degree = degree;
     }
 
-    public STRTree generateTreeFromMemory(ArrayList<Pair<Integer, LMBR>> mbrs) {
+    public STRTree generateTreeFromMemory(List<Pair<Integer, LMBR>> mbrs) {
         /**
          * how many page would this tree's leaf need. <br/> one page is at most <b>degree</b> mbrs
          */
@@ -47,7 +48,7 @@ public class STRTreeHelper {
         return node;
     }
 
-    private STRTree recursiveGenerateFromMemory(@NotNull ArrayList<Pair<Integer, LMBR>> mbrWithIds, int currentDim, int usePages) {
+    private STRTree recursiveGenerateFromMemory(@NotNull List<Pair<Integer, LMBR>> mbrWithIds, int currentDim, int usePages) {
         STRTree node = null;
         int mbrDim = mbrWithIds.get(0).getValue().upper.length;
         if (mbrWithIds.size() <= degree || currentDim == mbrDim - 1) {
@@ -104,7 +105,7 @@ public class STRTreeHelper {
      * @param mbrDim the number of dimension each mbr have
      * @return tree nodes list
      */
-    private ArrayList<STRTree> createLeafSegment(@NotNull ArrayList<Pair<Integer, LMBR>> pairs, int mbrDim) {
+    private ArrayList<STRTree> createLeafSegment(@NotNull List<Pair<Integer, LMBR>> pairs, int mbrDim) {
         int resultSize = (int)Math.ceil(pairs.size() * 1.0 / degree);
         ArrayList<STRTree> result = new ArrayList<>(resultSize);
         for (int n = 0; n < resultSize; n++){

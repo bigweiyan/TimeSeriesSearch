@@ -21,34 +21,61 @@ public class TimeSeriesIndexer {
     private int treeDegree;
     public long bufferIOTime = 0;
     public long myIOTime = 0;
+    private int lmbrIOTime = 0;
+    private int lmbrProgress = 0;
     public TimeSeriesIndexer(int lmbrDim, int treeDegree) {
         this.lmbrDim = lmbrDim;
         this.treeDegree = treeDegree;
     }
 
-    public void creatIndex(String inputFolder, String indexFolder, float diffThreshold, float usageThreshold,
-                           float bandRate, boolean haveLabel, String divider) throws IOException{
-        File file = new File(inputFolder);
-        for (File dataFile:file.listFiles()) {
-            if (dataFile.isFile()) {
-                // input data
-                System.out.println("-----------create index-----------");
-                Date date = new Date();
-                ArrayList<Integer> exceptionIDs = new ArrayList<>();
-                ArrayList<Pair<Integer, LMBR>> lmbrAndIds = new ArrayList<>();
-                ArrayList<String> labels = new ArrayList<>();
-                int seriesLength = 0;
-                Scanner scanner = new Scanner(new FileInputStream(dataFile));
-                TimeSeriesParser reader = new TimeSeriesParser(divider);
-                String line;
-                TimeSeriesRawIO rawWriter;
-                TimeSeriesEnvelop currentEnvelop;
-                double currentData[];
-                LMBRHelper lmbrHelper;
-                int dataSize = 0;
-                // read data, split it into lmbrs and exceptions and then write it back
+    public void creatIndex(String inputFolder, String indexName, String indexFolder, LBRSConfiguration configuration) throws IOException{
+        float diffThreshold = configuration.getDiffThreshold();
+        float usageThreshold = configuration.getUsageThreshold();
+        float bandRate = configuration.getBandRate();
+        boolean haveLabel = configuration.isHasLable();
+        String divider = configuration.getDevider();
+        int shiftNum = configuration.getShiftNum();
+        File dataFile = new File(inputFolder + "/" + indexName);
+        if (dataFile.isFile()) {
+            // input data
+            System.out.println("-----------create index-----------");
+            Date date = new Date();
+            ArrayList<Integer> exceptionIDs = new ArrayList<>();
+            List<List<Pair<Integer, LMBR>>> lmbrAndIds = new ArrayList<>();
+            for (int i = 0; i < shiftNum; i++) {
+                lmbrAndIds.add(new ArrayList<>());
+            }
+            ArrayList<String> labels = new ArrayList<>();
+            int seriesLength = 0;
+            Scanner scanner = new Scanner(new FileInputStream(dataFile));
+            TimeSeriesParser reader = new TimeSeriesParser(divider);
+            String line;
+            TimeSeriesRawIO rawWriter;
+            TimeSeriesEnvelop currentEnvelop;
+            double currentData[];
+            LMBRHelper lmbrHelper;
+            int dataSize = 0;
+            // read data, split it into lmbrs and exceptions and then write it back
 
-                if (scanner.hasNext()) {
+            if (scanner.hasNext()) {
+                line = scanner.nextLine();
+                if (line.isEmpty()) throw new IllegalArgumentException("file format is wrong");
+                if (haveLabel) {
+                    String[] lines = line.split(divider, 2);
+                    line = lines[1];
+                    labels.add(lines[0]);
+                }
+                currentData = reader.readSeries(line);
+                seriesLength = currentData.length;
+                rawWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw", false,
+                        TimeSeriesRawIO.TYPE_PURE_DATA, 1, seriesLength);
+                rawWriter.bufferedWrite(currentData);
+                currentEnvelop = new TimeSeriesEnvelop(currentData, bandRate);
+                lmbrHelper = new LMBRHelper(currentEnvelop.lowerEnvelop.length, lmbrDim);
+                lmbrHelper.setThreshold(diffThreshold, usageThreshold);
+                lmbrHelper.testManyLMBR(currentEnvelop, dataSize, lmbrAndIds, exceptionIDs);
+                dataSize++;
+                while (scanner.hasNext()){
                     line = scanner.nextLine();
                     if (line.isEmpty()) break;
                     if (haveLabel) {
@@ -57,76 +84,65 @@ public class TimeSeriesIndexer {
                         labels.add(lines[0]);
                     }
                     currentData = reader.readSeries(line);
-                    seriesLength = currentData.length;
-                    rawWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw", false,
-                            TimeSeriesRawIO.TYPE_PURE_DATA, 1, seriesLength);
                     rawWriter.bufferedWrite(currentData);
                     currentEnvelop = new TimeSeriesEnvelop(currentData, bandRate);
-                    lmbrHelper = new LMBRHelper(currentEnvelop.lowerEnvelop.length, lmbrDim);
-                    lmbrHelper.setThreshold(diffThreshold, usageThreshold);
-                    lmbrHelper.testLMBR(currentEnvelop, dataSize, lmbrAndIds, exceptionIDs);
+                    lmbrHelper.testManyLMBR(currentEnvelop, dataSize, lmbrAndIds, exceptionIDs);
                     dataSize++;
-                    while (scanner.hasNext()){
-                        line = scanner.nextLine();
-                        if (line.isEmpty()) break;
-                        if (haveLabel) {
-                            String[] lines = line.split(divider, 2);
-                            line = lines[1];
-                            labels.add(lines[0]);
-                        }
-                        currentData = reader.readSeries(line);
-                        rawWriter.bufferedWrite(currentData);
-                        currentEnvelop = new TimeSeriesEnvelop(currentData, bandRate);
-                        lmbrHelper.testLMBR(currentEnvelop, dataSize, lmbrAndIds, exceptionIDs);
-                        dataSize++;
-                    }
-                    rawWriter.close();
-                }else {
-                    throw new IllegalArgumentException("file format isn't right");
                 }
-                scanner.close();
-                System.out.println("exceptions: " + exceptionIDs.size() + ", mbrs: " + lmbrAndIds.size());
-                System.out.println("split time:"+Long.toString(new Date().getTime() - date.getTime()));
-
-
-                // save exceptions
-                date = new Date();
-                TimeSeriesRawIO exceptionsWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".edt",
-                        false, TimeSeriesRawIO.TYPE_EXCEPTION, 1, seriesLength);
-                TimeSeriesRawIO rawReader = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw",
-                        true, TimeSeriesRawIO.TYPE_PURE_DATA, 1);
-                for (int i = 0; i < exceptionIDs.size(); i++) {
-                    int pos = exceptionIDs.get(i);
-                    exceptionsWriter.bufferedWriteException(rawReader.bufferedRead(pos), pos);
-                }
-                exceptionsWriter.close();
-                System.out.println("exception write time:"+Long.toString(new Date().getTime() - date.getTime()));
-
-                //save classes
-                if (haveLabel) {
-                    BufferedWriter writer = new BufferedWriter(new FileWriter(indexFolder + "/" + dataFile.getName() + ".clz"), 2048);
-                    writer.write(labels.get(0));
-                    for (int i = 0; i < labels.size(); i++) {
-                        writer.write(divider);
-                        writer.write(labels.get(i));
-                    }
-                    writer.flush();
-                    writer.close();
-                }
-
-                // create and save tree
-                date = new Date();
-                STRTreeHelper strTreeHelper = new STRTreeHelper(treeDegree);
-                STRTree tree = strTreeHelper.generateTreeFromMemory(lmbrAndIds);
-                System.out.println("tree generate time:"+Long.toString(new Date().getTime() - date.getTime())
-                        + ", split time:" + strTreeHelper.splitTime + ", sort time:" + strTreeHelper.sortTime
-                        + ", create object time:" + strTreeHelper.objectTime);
-                date = new Date();
-                outputTree(indexFolder, dataFile.getName(), tree, rawReader, dataSize, seriesLength);
-                rawReader.close();
-                System.out.println("index write time:"+Long.toString(new Date().getTime() - date.getTime())
-                        + ", bufferIOTime:" + bufferIOTime + ", myIOTime:" + myIOTime);
+                rawWriter.close();
+            }else {
+                throw new IllegalArgumentException("file format isn't right");
             }
+            scanner.close();
+            System.out.print("exceptions: " + exceptionIDs.size());
+            for (int i = 0; i < shiftNum; i++) {
+                System.out.print(", mbrs(" + i + "):" + lmbrAndIds.get(i).size());
+            }
+            System.out.println("\nsplit time:"+Long.toString(new Date().getTime() - date.getTime()));
+
+
+            // save exceptions
+            date = new Date();
+            TimeSeriesRawIO exceptionsWriter = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".edt",
+                    false, TimeSeriesRawIO.TYPE_EXCEPTION, 1, seriesLength);
+            TimeSeriesRawIO rawReader = new TimeSeriesRawIO(indexFolder + "/" + dataFile.getName() + ".raw",
+                    true, TimeSeriesRawIO.TYPE_PURE_DATA, 1);
+            for (int i = 0; i < exceptionIDs.size(); i++) {
+                int pos = exceptionIDs.get(i);
+                exceptionsWriter.bufferedWriteException(rawReader.bufferedRead(pos), pos);
+            }
+            exceptionsWriter.close();
+            System.out.println("exception write time:"+Long.toString(new Date().getTime() - date.getTime()));
+
+            //save classes
+            if (haveLabel) {
+                BufferedWriter writer = new BufferedWriter(new FileWriter(indexFolder + "/" + dataFile.getName() + ".clz"), 2048);
+                writer.write(labels.get(0));
+                for (int i = 0; i < labels.size(); i++) {
+                    writer.write(divider);
+                    writer.write(labels.get(i));
+                }
+                writer.flush();
+                writer.close();
+            }
+
+            // create and save tree
+            date = new Date();
+            STRTreeHelper strTreeHelper = new STRTreeHelper(treeDegree);
+            List<STRTree> trees = new ArrayList<>();
+            for (int i = 0; i < shiftNum; i++){
+                trees.add(strTreeHelper.generateTreeFromMemory(lmbrAndIds.get(i)));
+            }
+            System.out.println("tree generate time:"+Long.toString(new Date().getTime() - date.getTime())
+                    + ", split time:" + strTreeHelper.splitTime + ", sort time:" + strTreeHelper.sortTime
+                    + ", create object time:" + strTreeHelper.objectTime);
+            date = new Date();
+            for (int i = 0; i < shiftNum; i++) {
+                outputTree(indexFolder, dataFile.getName() + "." + i, trees.get(i), rawReader, dataSize, seriesLength);
+            }
+            rawReader.close();
+            System.out.println("index write time:"+Long.toString(new Date().getTime() - date.getTime())
+                    + ", bufferIOTime:" + bufferIOTime + ", myIOTime:" + myIOTime);
         }
     }
 
@@ -166,10 +182,10 @@ public class TimeSeriesIndexer {
         treFile.close();
 
         lineLength = lmbrDim * 20 + 4;
-        BufferedOutputStream idxStream = new BufferedOutputStream(
-                new FileOutputStream(indexFolder + "/" + indexName + ".idx"), lineLength * size);
-        BufferedOutputStream mapStream = new BufferedOutputStream(
-                new FileOutputStream(indexFolder + "/" + indexName + ".map"), 4 * size);
+        RandomAccessFile idxStream = new RandomAccessFile(
+                indexFolder + "/" + indexName + ".idx", "rw");
+        RandomAccessFile mapStream = new RandomAccessFile(
+                indexFolder + "/" + indexName + ".map","rw");
         byte intTemp[] = new byte[4];
         BitTool.intToBytes(dataSize, intTemp, 0);
         mapStream.write(intTemp);
@@ -178,15 +194,15 @@ public class TimeSeriesIndexer {
         TimeSeriesRawIO timeSeriesRawIO = new TimeSeriesRawIO(indexFolder + "/" + indexName + ".odt",
                 false, TimeSeriesRawIO.TYPE_PURE_DATA, 1, seriesLength);
         for (int i = 0; i < seriesList.size(); i++) {
-            outPutLMBR(idxStream, seriesList.get(i),mapStream);
             Date date = new Date();
+            outPutLMBR(idxStream, seriesList.get(i),mapStream);
+            lmbrIOTime += new Date().getTime() - date.getTime();
+            date = new Date();
             timeSeriesRawIO.bufferedWrite(rawReader.bufferedRead(seriesList.get(i).getKey()));
             myIOTime += new Date().getTime() - date.getTime();
         }
         timeSeriesRawIO.close();
-        idxStream.flush();
         idxStream.close();
-        mapStream.flush();
         mapStream.close();
     }
 
@@ -244,7 +260,7 @@ public class TimeSeriesIndexer {
         bufferIOTime += new Date().getTime() - date.getTime();
     }
 
-    private void outPutLMBR(BufferedOutputStream lmbrStream, Pair<Integer, LMBR> series, BufferedOutputStream mapStream) throws IOException{
+    private void outPutLMBR(RandomAccessFile lmbrStream, Pair<Integer, LMBR> series, RandomAccessFile mapStream) throws IOException{
         byte tmp[] = new byte[4 + lmbrDim * 20];
         BitTool.intToBytes(series.getKey(), tmp, 0);
         int pos = 4;
@@ -260,6 +276,10 @@ public class TimeSeriesIndexer {
         BitTool.intToBytes(series.getKey(), intTmp, 0);
         mapStream.write(intTmp);
         bufferIOTime += new Date().getTime() - date.getTime();
+        lmbrProgress += 1;
+        if (lmbrProgress % 10000 == 0) {
+            System.out.println("lmbr output:" + lmbrProgress + " lmbrIOTime:" + lmbrIOTime + ", myIOTime:" + myIOTime);
+        }
     }
 
     public void printIndex(String indexFolder, String indexName) throws IOException{
