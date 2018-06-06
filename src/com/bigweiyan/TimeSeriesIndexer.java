@@ -95,10 +95,13 @@ public class TimeSeriesIndexer {
             }
             scanner.close();
             System.out.print("exceptions: " + exceptionIDs.size());
+            int mbrSize = 0;
             for (int i = 0; i < shiftNum; i++) {
+                mbrSize += lmbrAndIds.get(i).size();
                 System.out.print(", mbrs(" + i + "):" + lmbrAndIds.get(i).size());
             }
-            System.out.println("\nsplit time:"+Long.toString(new Date().getTime() - date.getTime()));
+            System.out.println("\nsplit time:"+Long.toString(new Date().getTime() - date.getTime()) +
+                    ", exp rate:" + exceptionIDs.size() * 1.0 / (mbrSize + exceptionIDs.size()));
 
 
             // save exceptions

@@ -53,7 +53,7 @@ public class DTWCalculator {
      * @param candidate 已查时间序列
      * @return 查找结果在原始数据中的下标。如果返回-1，则表示之前调用match方法返回过更好的值
      */
-    public int matchQueryWithLongRawSeries(TimeSeries query, double[] candidate) {
+    public int matchQueryWithLongRawSeries(TimeSeries query, double[] candidate, boolean useUSP) {
         // 为了减小浮点误差，每隔一个epoch重新计算累积值
         final int EPOCH = 100000;
         int bufferLen = 0;
@@ -186,7 +186,7 @@ public class DTWCalculator {
                         }
                     }
 
-                    double dist = DTW(query, normedC, choosedBound);
+                    double dist = useUSP ? DTW_USP(query, normedC, choosedBound) : DTW(query, normedC, choosedBound);
 
                     if (dist < bestSoFar) {
                         bestSoFar = dist;
@@ -208,7 +208,7 @@ public class DTWCalculator {
         return result;
     }
 
-    public boolean matchQueryWithRawSeries(TimeSeries query, double[] candidate) {
+    public boolean matchQueryWithRawSeries(TimeSeries query, double[] candidate, boolean useUSP) {
         double sum = 0;
         double squareSum = 0;
         for (int i = 0; i < queryLen; i++) {
@@ -246,7 +246,7 @@ public class DTWCalculator {
                 choosedBound[k] = choosedBound[k + 1] + keogh2Bound[k];
             }
         }
-        double dist = DTW(query, candidate, choosedBound);
+        double dist = useUSP ? DTW_USP(query, candidate, choosedBound) : DTW(query, candidate, choosedBound);
         if (dist < bestSoFar) {
             bestSoFar = dist;
             return true;
@@ -266,7 +266,7 @@ public class DTWCalculator {
      * @param candidate
      * @return if this candidate is your nearest candidate
      */
-    public boolean matchQueryWithNormedSeries(TimeSeries query, TimeSeries candidate) {
+    public boolean matchQueryWithNormedSeries(TimeSeries query, TimeSeries candidate, boolean useUSP) {
         if (lbKimOnNormed(query, candidate.data, 0) > bestSoFar) {
             kimCount++; // use lb_kim trim
             return false;
@@ -294,7 +294,7 @@ public class DTWCalculator {
                 choosedBound[k] = choosedBound[k + 1] + keogh2Bound[k];
             }
         }
-        double dist = DTW(query, candidate.data, choosedBound);
+        double dist = useUSP ? DTW_USP(query, candidate.data, choosedBound) : DTW(query, candidate.data, choosedBound);
         if (dist < bestSoFar) {
             bestSoFar = dist;
             return true;
@@ -373,7 +373,7 @@ public class DTWCalculator {
                     int key = lmbrPair.getKey();
                     TimeSeries timeSeries = new TimeSeries(loader.getTSFromKey(key), width);
                     timeSeries.initAsCand(false);
-                    boolean isBetter = matchQueryWithNormedSeries(query, timeSeries);
+                    boolean isBetter = matchQueryWithNormedSeries(query, timeSeries, false);
                     if (isBetter) result = key;
                 }
             }
@@ -394,7 +394,7 @@ public class DTWCalculator {
         }
         startPos[0] = shift;
         startPos[segment] = length + shift;
-        Queue<Pair<Object, Double>> candidates = new LinkedList<>();
+        Deque<Pair<Object, Double>> candidates = new LinkedList<>();
         candidates.offer(new Pair<>(tree, 0.0));
         while (!candidates.isEmpty()) {
             if (candidates.peek().getKey().getClass() == STRTree.class) {
@@ -429,14 +429,14 @@ public class DTWCalculator {
                                 }
                             }
                             if (lowerBound < bestSoFar)
-                                candidates.offer(new Pair<>(treeCand.series[i], lowerBound));
+                                candidates.offerLast(new Pair<>(treeCand.series[i], lowerBound));
                         }
                     }else {
                         for (int i = 0; i < treeCand.children.length; i++) {
                             LMBR treeLmbr = treeCand.children[i].lmbr;
                             int start;
                             lowerBound = 0;
-                            for (int j = 0; j < segment; j++) {
+                            for (int j = 0; j < segment - 1; j++) {
                                 start = startPos[j];
                                 for (int k = 0; k < treeLmbr.weights[j]; k++) {
                                     if (query.data[start + k] < treeLmbr.lower[j]){
@@ -457,7 +457,7 @@ public class DTWCalculator {
                                 }
                             }
                             if (lowerBound < bestSoFar)
-                                candidates.offer(new Pair<>(treeCand.children[i], lowerBound));
+                                candidates.offerLast(new Pair<>(treeCand.children[i], lowerBound));
                         }
                     }
                 }
@@ -470,7 +470,7 @@ public class DTWCalculator {
                     int key = lmbrPair.getKey();
                     TimeSeries timeSeries = new TimeSeries(loader.getTSFromKey(key), width);
                     timeSeries.initAsCand(false);
-                    boolean isBetter = matchQueryWithNormedSeries(query, timeSeries);
+                    boolean isBetter = matchQueryWithNormedSeries(query, timeSeries, false);
                     if (isBetter) result = key;
                 }
             }
@@ -636,6 +636,13 @@ public class DTWCalculator {
         return bestSoFar;
     }
 
+    /**
+     *
+     * @param query
+     * @param normedC
+     * @param bound
+     * @return
+     */
     private double DTW(TimeSeries query, double[] normedC, double[] bound) {
         double costPrev[] = new double[width * 2 + 1];
         double cost[] = new double[width * 2 + 1];
@@ -680,6 +687,107 @@ public class DTWCalculator {
         }
         k--;
         return costPrev[k];
+    }
+
+    /**
+     *
+     * @param query
+     * @param normedC
+     * @param bound
+     * @return
+     */
+    private double DTW_USP(TimeSeries query, double[] normedC, double[] bound) {
+        double costPrev[] = new double[queryLen];
+        double cost[] = new double[queryLen];
+        double minCost;
+        double x, y, z;
+        int sc = 0;
+        int ec = 0;
+        int nextEc;
+        int lastPruning = 0;
+        double ub = bestSoFar - bound[width + 1];
+        boolean foundSC;
+        boolean prunedEC = false;
+        int iniJ;
+        for (int i = 0; i < queryLen; i++) {
+            cost[i] = Double.MAX_VALUE;
+            costPrev[i] = Double.MAX_VALUE;
+        }
+        for (int i = 0; i < queryLen; i++) {
+            minCost = Double.MAX_VALUE;
+            foundSC = false;
+            prunedEC = false;
+            nextEc = i + width + 1;
+            iniJ = max(0, max(i-width, sc));
+            for (int j = iniJ; j <= min(queryLen - 1, i + width); j++) {
+                if ((i == 0) && (j == 0)) {
+                    cost[j] = distance(query.data[0], normedC[0]);
+                    minCost = cost[j];
+                    foundSC = true;
+                    continue;
+                }
+
+                if(j == iniJ){
+                    y = Double.MAX_VALUE;
+                } else {
+                    y = cost[j - 1];
+                }
+                if ((i == 0) || (j == i + width) || j >= lastPruning) {
+                    x = Double.MAX_VALUE;
+                } else {
+                    x = costPrev[j];
+                }
+                if ((i == 0) || (j == 0) || (j > lastPruning)) {
+                    z = Double.MAX_VALUE;
+                }else {
+                    z = costPrev[j - 1];
+                }
+
+                cost[j] = min(min(x, y), z) + distance(query.data[i], normedC[j]);
+                if (cost[j] < minCost) {
+                    minCost = cost[j];
+                }
+
+                if (!foundSC && cost[j] <= ub) {
+                    sc = j;
+                    foundSC = true;
+                }
+                if (cost[j] > ub){
+                    if (j > ec) {
+                        lastPruning = j;
+                        prunedEC = true;
+                        break;
+                    }
+                }else {
+                    nextEc = j + 1;
+                }
+            }
+
+            if (i + width < queryLen - 1) {
+                ub = bestSoFar - bound[i + width + 1];
+                if (minCost + bound[i + width + 1] >= bestSoFar) {
+                    return Double.MAX_VALUE;
+                }
+            }
+
+            double[] tmp;
+            tmp = cost;
+            cost = costPrev;
+            costPrev = tmp;
+
+            if(sc > 0) {
+                costPrev[sc - 1] = Double.MAX_VALUE;
+            }
+
+            if (!prunedEC){
+                lastPruning = i + width + 1;
+            }
+            ec = nextEc;
+        }
+        if (prunedEC) {
+            costPrev[queryLen - 1] = Double.MAX_VALUE;
+        }
+        return costPrev[queryLen - 1];
     }
 
     private double distance(double a, double b) {

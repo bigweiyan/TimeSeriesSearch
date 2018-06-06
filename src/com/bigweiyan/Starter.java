@@ -50,8 +50,10 @@ public class Starter {
         for (int i = 0; i < shiftNum; i++) {
             loaders.add(new MappedTimeSeriesLoader(indexFolder + "/" + dataName + "." + i));
         }
+        int querySize = 0;
         while (scanner.hasNext()) {
-            Date date = new Date();
+            querySize++;
+            Date searchTime = new Date();
             String queryLine = scanner.nextLine();
             if (hasLable) {
                 queryLine = queryLine.split(configuration.getDevider(),2)[1];
@@ -60,17 +62,17 @@ public class Starter {
             query.initAsQuery(false);
             if (calculator == null) calculator = new DTWCalculator(query.getLength(), query.bandWidth);
             calculator.reset();
-            int result = 0;
+            int result = -1;
             for (int i = 0; i < io.getTotalSeries(); i++) {
                 Pair<double[], Integer> pair = io.bufferedReadException(i);
                 TimeSeries candidate = new TimeSeries(pair.getKey(), configuration.getBandRate());
                 candidate.initAsCand(false);
-                if (calculator.matchQueryWithNormedSeries(query, candidate)) {
+                if (calculator.matchQueryWithNormedSeries(query, candidate, false)) {
                     result = pair.getValue();
                 }
             }
-            expSearchTime += new Date().getTime() - date.getTime();
-            Date searchTime = new Date();
+            expSearchTime += new Date().getTime() - searchTime.getTime();
+            Date date = new Date();
             int treeNum = 0;
             int treeResult = -1;
             int minSegmentLen = query.getLength() / configuration.getLmbrDim();
@@ -81,34 +83,38 @@ public class Starter {
                     treeNum = i;
                 }
             }
+            treeSearchTime += new Date().getTime() - date.getTime();
             if (treeResult != -1) {
                 System.out.println("result(tree " + treeNum + "):" + treeResult);
             } else {
                 System.out.println("result(exp):" + result);
             }
-            treeSearchTime += new Date().getTime() - searchTime.getTime();
+
         }
         io.close();
         for (MappedTimeSeriesLoader loader:loaders) {
             loader.close();
         }
-        System.out.println("exp time:" + expSearchTime + "ms, tree time:" + treeSearchTime+ "ms, total time:" + (treeSearchTime + expSearchTime));
+        System.out.print("exp time:" + expSearchTime + "ms, tree time:" + treeSearchTime+ "ms, total time:" + (treeSearchTime + expSearchTime));
+        System.out.println(", avg time:" + (treeSearchTime + expSearchTime) / querySize);
         System.out.println("dtw count:"+calculator.leafCount + ", lb_lmbr count:" + calculator.nodeCount);
         scanner.close();
         fileInputStream.close();
     }
 
-    public void trillionSearch(String queryFileName, boolean hasLable) {
-        System.out.println("----------query-trillion----------");
+    public void UCRSearch(String queryFileName, boolean hasLable, boolean useUSP) {
+        System.out.println("----------query-UCR----------");
         TimeSeriesParser reader = new TimeSeriesParser(configuration.getDevider());
         TimeSeries query = null;
         double[] cand = null;
+        int querySize = 0;
         try {
             FileInputStream fileInputStream = new FileInputStream(queryFileName);
             Scanner scanner = new Scanner(fileInputStream);
             Date date = new Date();
             DTWCalculator calculator = null;
             while (scanner.hasNext()) {
+                querySize++;
                 String queryLine = scanner.nextLine();
                 if (hasLable) {
                     queryLine = queryLine.split(configuration.getDevider(),2)[1];
@@ -126,7 +132,7 @@ public class Starter {
                     cand = timeSeriesReader.bufferedRead(i);
                     candidate = new TimeSeries(cand, query.bandWidth);
                     candidate.initAsCand(false);
-                    if (calculator.matchQueryWithNormedSeries(query, candidate)) {
+                    if (calculator.matchQueryWithNormedSeries(query, candidate, useUSP)) {
                         result = i;
                     }
                 }
@@ -135,7 +141,8 @@ public class Starter {
             }
             scanner.close();
             fileInputStream.close();
-            System.out.println("trillion time:" + Long.toString(new Date().getTime() - date.getTime()));
+            long useTime = new Date().getTime() - date.getTime();
+            System.out.println("trillion time:" + Long.toString(useTime) + ", avg time:" + useTime / querySize);
         }catch (IOException e) {
             e.printStackTrace();
         }
